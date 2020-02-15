@@ -24,29 +24,29 @@ module tb_fpu_core();
     logic tb_start, tb_busy;
     fpu_p::Operation tb_op;
 
-    integer i,j,errors;
+    integer i,j,errors_add, errors_sub, errors_mult;
 
-    shortreal a_inputs[8:0] = {
+    shortreal a_inputs[5:0] = {
         3.0, 
         -12.0, 
         10.0, 
         -123.5, 
         -123.5, 
-        -657.645,
-        $bitstoshortreal(32'h0000075d), 
-        $bitstoshortreal(32'h8000075d), 
-        $bitstoshortreal(32'h0000075d)
+        -657.645
+        // $bitstoshortreal(32'h0000075d), 
+        // $bitstoshortreal(32'h8000075d), 
+        // $bitstoshortreal(32'h0000075d)
     };
-    shortreal b_inputs[8:0] = {
+    shortreal b_inputs[5:0] = {
         1234.0,
         10.0,
         -12.0,
         -12.0,
         123.5,
-        364.89,
-        $bitstoshortreal(32'h00000a9d),
-        $bitstoshortreal(32'h80000a9d),
-        $bitstoshortreal(32'h00000a9d)
+        364.89
+        // $bitstoshortreal(32'h00000a9d),
+        // $bitstoshortreal(32'h80000a9d),
+        // $bitstoshortreal(32'h00000a9d)
     };
 
     function shortreal abs(shortreal a); begin
@@ -107,7 +107,7 @@ module tb_fpu_core();
 
             if (tb_busy != 1) begin
                 $display("*** ERROR: Busy is not hight at time %0t", $time);
-                errors = errors + 1;
+                errors_add = errors_add + 1;
             end
 
             while(tb_busy != 0) begin
@@ -119,7 +119,7 @@ module tb_fpu_core();
 
             if (tb_result_32_e != tb_result_32_r && abs(tb_result_32_e - tb_result_32_r) > errorMargin) begin
                 $display("**** ERROR: %f + %f expecting result %f but recieved %f at time %0t", a, b, tb_result_32_e, tb_result_32_r, $time);
-                errors = errors + 1;
+                errors_add = errors_add + 1;
             end
             else
                 $display("*** Correct: %f + %f = %f ±%f received at time %0t", a,b,tb_result_32_r, errorMargin, $time); 
@@ -139,7 +139,7 @@ module tb_fpu_core();
 
             if (tb_busy != 1) begin
                 $display("*** ERROR: Busy is not hight at time %0t", $time);
-                errors = errors + 1;
+                errors_sub = errors_sub + 1;
             end
 
             while(tb_busy != 0) begin
@@ -151,7 +151,7 @@ module tb_fpu_core();
 
             if (tb_result_32_e != tb_result_32_r && abs(tb_result_32_e - tb_result_32_r) > errorMargin) begin
                 $display("**** ERROR: %f - %f expecting result %f but recieved %f at time %0t", a, b, tb_result_32_e, tb_result_32_r, $time);
-                errors = errors + 1;
+                errors_sub = errors_sub + 1;
             end
             else
                 $display("*** Correct: %f - %f = %f ±%f received at time %0t", a,b,tb_result_32_r, errorMargin, $time); 
@@ -171,7 +171,7 @@ module tb_fpu_core();
 
             if (tb_busy != 1) begin
                 $display("*** ERROR: Busy is not hight at time %0t", $time);
-                errors = errors + 1;
+                errors_mult = errors_mult + 1;
             end
 
             while(tb_busy != 0) begin
@@ -183,7 +183,7 @@ module tb_fpu_core();
 
             if (tb_result_32_e != tb_result_32_r && abs(tb_result_32_e - tb_result_32_r) > errorMargin) begin
                 $display("**** ERROR: %f * %f expecting result %f but recieved %f at time %0t", a, b, tb_result_32_e, tb_result_32_r, $time);
-                errors = errors + 1;
+                errors_mult = errors_mult + 1;
             end
             else
                 $display("*** Correct: %f * %f = %f ±%f received at time %0t", a,b,tb_result_32_r, errorMargin, $time); 
@@ -207,7 +207,9 @@ module tb_fpu_core();
     );
     
     initial begin
-        errors = 0;
+        errors_add = 0;
+        errors_sub = 0;
+        errors_mult = 0;
         errorMargin = 0.0001;
         
         //shall print %t with scaled in ns (-9), with 2 precision digits, and would print the " ns" string
@@ -219,7 +221,7 @@ module tb_fpu_core();
 
         init();
 
-        $display("Addition testing. Not that rounding will not be counted in this simulation.");
+        $display("Addition testing. Note that rounding will not be counted in this simulation.");
 
         for (i = 0; i < $size(a_inputs); i++) begin
             fpu_add(a_inputs[i], b_inputs[i]);
@@ -228,7 +230,7 @@ module tb_fpu_core();
             end
         end
 
-        $display("Subtraction testing. Not that rounding will not be counted in this simulation.");
+        $display("Subtraction testing. Note that rounding will not be counted in this simulation.");
 
         for (i = 0; i < $size(a_inputs); i++) begin
             fpu_sub(a_inputs[i], b_inputs[i]);
@@ -237,16 +239,30 @@ module tb_fpu_core();
             end
         end
 
-        $display("Multiplication testing. Not that rounding will not be counted in this simulation.");
+        $display("Multiplication testing. Note that rounding will not be counted in this simulation.");
 
         for (i = 0; i < $size(a_inputs); i++) begin
             fpu_multi(a_inputs[i], b_inputs[i]);
             for(j=0; j <5; j=j+1) begin
                 #5 clk = 1; #5 clk = 0;
+                #5 clk = 1; #5 clk = 0;
+                #5 clk = 1; #5 clk = 0;
+                #5 clk = 1; #5 clk = 0;
+                #5 clk = 1; #5 clk = 0;
+                #5 clk = 1; #5 clk = 0;
+                #5 clk = 1; #5 clk = 0;
+                #5 clk = 1; #5 clk = 0;
+                #5 clk = 1; #5 clk = 0;
+                #5 clk = 1; #5 clk = 0;
+                #5 clk = 1; #5 clk = 0;
+                #5 clk = 1; #5 clk = 0;
+                #5 clk = 1; #5 clk = 0;
             end
         end
 
-        $display("*** Simulation done with %3d errors *** %0t", errors, $time);
+        $display("*** Simulation done with %3d add errors *** %0t", errors_add, $time);
+        $display("*** Simulation done with %3d sub errors *** %0t", errors_sub, $time);
+        $display("*** Simulation done with %3d multi errors *** %0t", errors_mult, $time);
         $finish;
 
     end
