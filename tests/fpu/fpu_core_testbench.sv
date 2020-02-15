@@ -26,27 +26,27 @@ module tb_fpu_core();
 
     integer i,j,errors_add, errors_sub, errors_mult;
 
-    shortreal a_inputs[5:0] = {
+    shortreal a_inputs[8:0] = {
         3.0, 
         -12.0, 
         10.0, 
+        10.0, 
         -123.5, 
-        -123.5, 
-        -657.645
-        // $bitstoshortreal(32'h0000075d), 
-        // $bitstoshortreal(32'h8000075d), 
-        // $bitstoshortreal(32'h0000075d)
+        -657.645,
+        $bitstoshortreal(32'h0000075d), 
+        $bitstoshortreal(32'h8000075d), 
+        $bitstoshortreal(32'h0000075d)
     };
-    shortreal b_inputs[5:0] = {
-        1234.0,
+    shortreal b_inputs[8:0] = {
+        2.0,
         10.0,
         -12.0,
-        -12.0,
+        -10.0,
         123.5,
-        364.89
-        // $bitstoshortreal(32'h00000a9d),
-        // $bitstoshortreal(32'h80000a9d),
-        // $bitstoshortreal(32'h00000a9d)
+        364.89,
+        $bitstoshortreal(32'h00000a9d),
+        $bitstoshortreal(32'h80000a9d),
+        $bitstoshortreal(32'h00000a9d)
     };
 
     function shortreal abs(shortreal a); begin
@@ -181,8 +181,8 @@ module tb_fpu_core();
             tb_result_32_r = $bitstoshortreal(tb_result_32);
             tb_result_32_e = a * b;
 
-            if (tb_result_32_e != tb_result_32_r && abs(tb_result_32_e - tb_result_32_r) > errorMargin) begin
-                $display("**** ERROR: %f * %f expecting result %f but recieved %f at time %0t", a, b, tb_result_32_e, tb_result_32_r, $time);
+            if (tb_result_32_e != tb_result_32_r && abs(tb_result_32_e - tb_result_32_r) > abs(errorMargin * tb_result_32_e)) begin
+                $display("**** ERROR: %f * %f expecting result %f +- %f but recieved %f at time %0t", a, b, tb_result_32_e, abs(errorMargin * tb_result_32_e), tb_result_32_r, $time);
                 errors_mult = errors_mult + 1;
             end
             else
@@ -210,7 +210,7 @@ module tb_fpu_core();
         errors_add = 0;
         errors_sub = 0;
         errors_mult = 0;
-        errorMargin = 0.0001;
+        errorMargin = 0.01;
         
         //shall print %t with scaled in ns (-9), with 2 precision digits, and would print the " ns" string
 		$timeformat(-9, 0, " ns", 20);
@@ -244,18 +244,6 @@ module tb_fpu_core();
         for (i = 0; i < $size(a_inputs); i++) begin
             fpu_multi(a_inputs[i], b_inputs[i]);
             for(j=0; j <5; j=j+1) begin
-                #5 clk = 1; #5 clk = 0;
-                #5 clk = 1; #5 clk = 0;
-                #5 clk = 1; #5 clk = 0;
-                #5 clk = 1; #5 clk = 0;
-                #5 clk = 1; #5 clk = 0;
-                #5 clk = 1; #5 clk = 0;
-                #5 clk = 1; #5 clk = 0;
-                #5 clk = 1; #5 clk = 0;
-                #5 clk = 1; #5 clk = 0;
-                #5 clk = 1; #5 clk = 0;
-                #5 clk = 1; #5 clk = 0;
-                #5 clk = 1; #5 clk = 0;
                 #5 clk = 1; #5 clk = 0;
             end
         end

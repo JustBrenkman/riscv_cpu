@@ -77,14 +77,12 @@ module fpu_core #(
     fpu_multi #(WIDTH, E, F) multiplier(
         .clk(clk),
         .rst(rst),
-        .busy(multi_busy),
-        .start(multi_start),
-        .a_sign(a_sign),
-        .b_sign(b_sign),
-        .a_exponent(a_exponent),
-        .b_exponent(b_exponent),
-        .a_fraction(a_fraction),
-        .b_fraction(b_fraction),
+        .a_sign(b_sign),
+        .b_sign(a_sign),
+        .a_exponent(b_exponent),
+        .b_exponent(a_exponent),
+        .a_fraction(b_fraction),
+        .b_fraction(a_fraction),
         .result_s(multi_result_s),
         .result_e(multi_result_e),
         .result_f(multi_result_f)
@@ -98,7 +96,7 @@ module fpu_core #(
     assign b_exponent = b_reg[E + F - 1:F];
     assign b_fraction = {~b_exponent == 1'b0 ? 1'b0 : 1'b1, b_reg[F - 1:0]};
 
-    assign busy = norm_busy | start | multi_busy | state == BUSY | state == NORM;
+    assign busy = norm_busy | start | state == BUSY | state == NORM;
     assign result = {norm_result_s, norm_result_e, norm_result_f};
 
     always_ff@(posedge clk)
@@ -134,10 +132,10 @@ module fpu_core #(
             BUSY:
                 begin
                     multi_start <= 0;
-                    if (multi_busy != 1 && multi_start == 0) begin
+                    // if (multi_busy != 1 && multi_start == 0) begin
                         state <= NORM;
                         norm_start <= 1;
-                    end
+                    // end
                 end
             NORM:
                 begin
@@ -148,7 +146,7 @@ module fpu_core #(
         endcase
     end
 
-    assign norm_input_f = op_reg == MUL ? multi_result_f[F:0] : adder_result_f;
+    assign norm_input_f = op_reg == MUL ? multi_result_f : adder_result_f;
     assign norm_input_e = op_reg == MUL ? multi_result_e : adder_result_e;
     assign norm_input_s = op_reg == MUL ? multi_result_s : adder_result_s;
 
