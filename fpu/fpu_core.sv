@@ -132,10 +132,8 @@ module fpu_core #(
             BUSY:
                 begin
                     multi_start <= 0;
-                    // if (multi_busy != 1 && multi_start == 0) begin
-                        state <= NORM;
-                        norm_start <= 1;
-                    // end
+                    state <= NORM;
+                    norm_start <= 1;
                 end
             NORM:
                 begin
