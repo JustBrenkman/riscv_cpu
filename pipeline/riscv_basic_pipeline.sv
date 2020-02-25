@@ -30,9 +30,6 @@ module riscv_basic_pipeline
     output wire logic[XLEN - 1:0] WriteBackData
 );
 
-    // logic[XLEN - 1:0] program_counter;
-    // assign PC = program_counter;
-
     //////////////////////////////////////////////////////////////////////
     // IF: Instruction Fetch
     //////////////////////////////////////////////////////////////////////	
@@ -44,12 +41,11 @@ module riscv_basic_pipeline
         if (rst)
             PC <= PC_INITIAL;
         else if (mem_PCSrc)
-            if_PC <= mem_branchTarget;
+            if_PC <= mem_branchAddress;
         else begin
             if_PC <= PC + 4;
         end
     end
-
 
     //////////////////////////////////////////////////////////////////////
     // ID: Instruction Decode
@@ -150,9 +146,9 @@ module riscv_basic_pipeline
         if (id_RegWrite && mem_instruction.register.rd != ZERO) begin 
             id_registerFile[mem_instruction.register.rd] <= mem_RegData;
             if (id_instruction.register.rs1 == wb_instruction.register.rd_address)
-                ex_rs1 <= mem_RegData;
+                ex_rs1 <= wb_RegWriteData;
             if (id_instruction.register.rs2 == wb_instruction.register.rd_address)
-                ex_rs2 <= mem_RegData;
+                ex_rs2 <= wb_RegWriteData;
         end
     end
 
@@ -193,8 +189,15 @@ module riscv_basic_pipeline
     // EX: Execute
     //////////////////////////////////////////////////////////////////////	
     logic Instruction ex_instruction;
-    logic[XLEN - 1:0] ex_PC, ex_immediate;
-    logic ex_ALUCtrl, ex_ALUSrc, ex_MemWrite, ex_MemRead, ex_Branch, ex_RegWrite, ex_MemtoReg;
+    logic[XLEN - 1:0] ex_PC, ex_immediate, ex_aluOp1, ex_aluOp2, ex_aluResult, ex_branchAddress;
+    logic ex_ALUSrc, ex_MemWrite, ex_MemRead, ex_Branch, ex_RegWrite, ex_MemtoReg, ex_Zero;
+    riscv_core_p::ALUOp ex_ALUCtrl;
+    
+    assign ex_aluOp1 = ex_rs1;
+    assign ex_aluOp2 = ex_ALUSrc ? ex_immediate : ex_rs2;
+    assign ex_Zero = ex_aluResult == ZERO;
+
+    assign ex_branchAddress = (ex_immediate << 1) + ex_PC;
 
     always@(posedge clk) begin
         if(rst) begin
@@ -206,6 +209,8 @@ module riscv_basic_pipeline
             ex_Branch <= 0;
             ex_RegWrite <= 0;
             ex_MemtoReg <= 0;
+            ex_instruction <= 0;
+            ex_immediate <= 0;
         end else begin
             ex_PC <= id_PC;
             ex_ALUCtrl <= id_ALUCtrl;
@@ -216,22 +221,91 @@ module riscv_basic_pipeline
             ex_RegWrite <= id_RegWrite;
             ex_MemtoReg <= id_MemtoReg;
             ex_instruction <= id_instruction;
+            ex_immediate <= id_immediate;
         end
+    end
+
+    // ALU combinational logic. Defaults to zero.
+    always_comb begin
+        case(ex_ALUCtrl)
+            ALU_ADD: ex_aluResult = ex_aluOp1 + ex_aluOp2;
+            ALU_SUB: ex_aluResult = ex_aluOp1 - ex_aluOp2;
+            ALU_OR: ex_aluResult = ex_aluOp1 | ex_aluOp2;
+            ALU_XOR: ex_aluResult = ex_aluOp1 ^ ex_aluOp2;
+            ALU_AND: ex_aluResult = ex_aluOp1 & ex_aluOp2;
+            ALU_SLT: ex_aluResult = $signed(ex_aluOp1) < $signed(ex_aluOp2);
+            default: ex_aluResult = ZERO;
+        endcase
     end
 
 
     //////////////////////////////////////////////////////////////////////
     // MEM: Memory Access
     //////////////////////////////////////////////////////////////////////	
-    logic mem_RegWrite;
     logic Instruction mem_instruction;
+    logic[XLEN - 1:0] mem_PC, mem_immediate, mem_aluResult, mem_branchAddress, mem_rs2;
+    logic mem_MemWrite, mem_MemRead, mem_Branch, mem_RegWrite, mem_MemtoReg, mem_Zero, mem_PCSrc;
 
+    assign mem_PCSrc = mem_Branch & mem_Zero;
+    assign dAddress = mem_aluResult;
+    assign dWriteData = mem_rs2;
+    assign MemWrite = mem_MemWrite;
+    assign MemRead = mem_MemRead;
+
+    always@(posedge clk) begin
+        if(rst) begin
+            mem_PC <= 0;
+            mem_ALUCtrl <= 0;
+            mem_ALUSrc <= 0;
+            mem_MemWrite <= 0;
+            mem_MemRead <= 0;
+            mem_Branch <= 0;
+            mem_RegWrite <= 0;
+            mem_MemtoReg <= 0;
+            mem_instruction <= 0;
+            mem_immediate <= 0;
+            mem_branchAddress <= 0;
+            mem_Zero <= 0;
+            mem_aluResult <= 0;
+            mem_rs2 <= 0;
+        end else begin
+            mem_PC <= ex_PC;
+            mem_ALUSrc <= ex_ALUSrc;
+            mem_MemWrite <= ex_MemWrite;
+            mem_MemRead <= ex_MemRead;
+            mem_Branch <= ex_Branch;
+            mem_RegWrite <= ex_RegWrite;
+            mem_MemtoReg <= ex_MemtoReg;
+            mem_instruction <= ex_instruction;
+            mem_immediate <= ex_immediate;
+            mem_branchAddress <= ex_branchAddress;
+            mem_instruction <= ex_instruction;
+            mem_aluResult <= ex_aluResult;
+            mem_Zero <= ex_Zero;
+            mem_rs2 <= ex_rs2;
+        end
+    end
 
     //////////////////////////////////////////////////////////////////////
     // WB: Write Back
     //////////////////////////////////////////////////////////////////////	
-    logic[XLEN - 1:0] wb_RegData
+    logic[XLEN - 1:0] wb_RegWriteData, wb_ReadData, wb_MemToReg, wb_aluResult;
+    logic Instruction wb_instruction;
 
+    assign wb_RegWriteData = wb_MemToReg ? wb_ReadData : wb_aluResult;
 
+    always_ff@(posedge clk)
+        if (rst) begin
+            wb_instruction <= 0;
+            wb_ReadData <= 0;
+            wb_MemToReg <= 0;
+            wb_aluResult <= 0;
+        end
+        else begin
+            wb_instruction <= mem_instruction;
+            wb_ReadData <= dReadData;
+            wb_MemToReg <= mem_MemtoReg;
+            wb_aluResult <= mem_aluResult;
+        end
 
 endmodule
