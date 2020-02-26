@@ -12,22 +12,23 @@
 
 import riscv_core_p::*;
 
+// Basice pipelined riscv core.
 module riscv_basic_pipeline 
 #(
-    parameter PC_INITIAL = 0x00400000,
+    parameter INITIAL_PC = 32'h00400000,
     parameter XLEN = 32
 ) (
     input wire logic clk,
     input wire logic rst,
+    input wire logic[XLEN - 1:0] dReadData,
+    input wire logic[RISCV_INSTR_LEN - 1:0] instruction,
+    output logic MemRead,
+    output logic MemWrite,
     output logic[XLEN - 1:0] PC,
-    input logic[RISCV_INSTR_LEN - 1] instruction,
-    output wire logic[XLEN - 1:0] ALUResult,
-    output wire logic[XLEN - 1:0] dAddress,
-    output wire logic[XLEN - 1:0] dWriteData,
-    output wire logic[XLEN - 1:0] dReadData,
-    output wire logic MemRead,
-    output wire logic MemWrite,
-    output wire logic[XLEN - 1:0] WriteBackData
+    output logic[XLEN - 1:0] ALUResult,
+    output logic[XLEN - 1:0] dAddress,
+    output logic[XLEN - 1:0] dWriteData,
+    output logic[XLEN - 1:0] WriteBackData
 );
 
     //////////////////////////////////////////////////////////////////////
@@ -37,9 +38,10 @@ module riscv_basic_pipeline
 
     assign PC = if_PC;
 
+    // Updates the PC counter.
     always@(posedge clk) begin
         if (rst)
-            PC <= PC_INITIAL;
+            if_PC <= INITIAL_PC;
         else if (mem_PCSrc)
             if_PC <= mem_branchAddress;
         else begin
@@ -50,14 +52,15 @@ module riscv_basic_pipeline
     //////////////////////////////////////////////////////////////////////
     // ID: Instruction Decode
     //////////////////////////////////////////////////////////////////////	
-    logic Instruction id_instruction;
+    riscv_core_p::Instruction id_instruction;
     riscv_core_p::ALUOp id_ALUCtrl;
     logic[XLEN - 1:0] id_PC, id_immediate, ex_rs1, ex_rs2;
     logic id_ALUSrc, id_MemWrite, id_MemRead, id_Branch, id_RegWrite, id_MemtoReg;
-    logic[XLEN - 1:0] registerFile[RISCV_REG_NUM:0];
+    logic[XLEN - 1:0] id_registerFile[RISCV_REG_NUM:0];
 
-    assign id_instruction = instruciton;
+    assign id_instruction = instruction;
 
+    // Pipelines the IF stage PC to the ID stage.
     always@(posedge clk)
         if (rst)
             id_PC <= 0;
@@ -120,7 +123,7 @@ module riscv_basic_pipeline
                 id_ALUCtrl = ALU_ADD;
                 id_Branch = 0;
                 id_ALUSrc = 1;
-                id_MemtoReg = 1;
+                id_MemtoReg = 0;
                 id_RegWrite = 0;
                 id_MemRead = 0;
                 id_MemWrite = 1;
@@ -138,16 +141,16 @@ module riscv_basic_pipeline
         endcase
     end
 
-    // Register file that has a single write port.
+    // Register file that has a single syncrounous write port.
     always_ff@(posedge clk) begin
-        ex_rs1 <= registerFile[id_instruction.register.rs1];
-        ex_rs2 <= registerFile[id_instruction.register.rs2];
+        ex_rs1 <= id_registerFile[id_instruction.register.rs1];
+        ex_rs2 <= id_registerFile[id_instruction.register.rs2];
 
-        if (id_RegWrite && mem_instruction.register.rd != ZERO) begin 
-            id_registerFile[mem_instruction.register.rd] <= mem_RegData;
-            if (id_instruction.register.rs1 == wb_instruction.register.rd_address)
+        if (wb_RegWrite && wb_instruction.register.rd != ZERO) begin 
+            id_registerFile[wb_instruction.register.rd] <= wb_RegWriteData;
+            if (id_instruction.register.rs1 == wb_instruction.register.rd)
                 ex_rs1 <= wb_RegWriteData;
-            if (id_instruction.register.rs2 == wb_instruction.register.rd_address)
+            if (id_instruction.register.rs2 == wb_instruction.register.rd)
                 ex_rs2 <= wb_RegWriteData;
         end
     end
@@ -155,7 +158,7 @@ module riscv_basic_pipeline
     // Initial block to initialize the register file.
     initial begin
         integer i;
-        for (i = 0; i < RISCV_REG_NUM; i=i+1) begin
+        for (i = 0; i <= RISCV_REG_NUM; i=i+1) begin
             id_registerFile[i] = ZERO;
         end
     end
@@ -170,7 +173,8 @@ module riscv_basic_pipeline
                 id_instruction.branch.imm12,
                 id_instruction.branch.imm11,
                 id_instruction.branch.imm10_5,
-                id_instruction.branch.imm4_1
+                id_instruction.branch.imm4_1,
+                1'b0
             };
             riscv_core_p::S: id_immediate = {
                 {XLEN - riscv_core_p::REGAD_LEN {id_instruction.store.imm11_5[BIT_11]}}, 
@@ -188,7 +192,7 @@ module riscv_basic_pipeline
     //////////////////////////////////////////////////////////////////////
     // EX: Execute
     //////////////////////////////////////////////////////////////////////	
-    logic Instruction ex_instruction;
+    riscv_core_p::Instruction ex_instruction;
     logic[XLEN - 1:0] ex_PC, ex_immediate, ex_aluOp1, ex_aluOp2, ex_aluResult, ex_branchAddress;
     logic ex_ALUSrc, ex_MemWrite, ex_MemRead, ex_Branch, ex_RegWrite, ex_MemtoReg, ex_Zero;
     riscv_core_p::ALUOp ex_ALUCtrl;
@@ -196,13 +200,15 @@ module riscv_basic_pipeline
     assign ex_aluOp1 = ex_rs1;
     assign ex_aluOp2 = ex_ALUSrc ? ex_immediate : ex_rs2;
     assign ex_Zero = ex_aluResult == ZERO;
+    assign ALUResult = ex_aluResult;
 
-    assign ex_branchAddress = (ex_immediate << 1) + ex_PC;
+    assign ex_branchAddress = ex_immediate + ex_PC;
 
+    // Pipelines the ID stage control signals to the EX stage.
     always@(posedge clk) begin
         if(rst) begin
             ex_PC <= 0;
-            ex_ALUCtrl <= 0;
+            ex_ALUCtrl <= ALU_AND;
             ex_ALUSrc <= 0;
             ex_MemWrite <= 0;
             ex_MemRead <= 0;
@@ -242,7 +248,7 @@ module riscv_basic_pipeline
     //////////////////////////////////////////////////////////////////////
     // MEM: Memory Access
     //////////////////////////////////////////////////////////////////////	
-    logic Instruction mem_instruction;
+    riscv_core_p::Instruction mem_instruction;
     logic[XLEN - 1:0] mem_PC, mem_immediate, mem_aluResult, mem_branchAddress, mem_rs2;
     logic mem_MemWrite, mem_MemRead, mem_Branch, mem_RegWrite, mem_MemtoReg, mem_Zero, mem_PCSrc;
 
@@ -252,11 +258,10 @@ module riscv_basic_pipeline
     assign MemWrite = mem_MemWrite;
     assign MemRead = mem_MemRead;
 
+    // Pipelines the EX stage control signals to the MEM stage.
     always@(posedge clk) begin
         if(rst) begin
             mem_PC <= 0;
-            mem_ALUCtrl <= 0;
-            mem_ALUSrc <= 0;
             mem_MemWrite <= 0;
             mem_MemRead <= 0;
             mem_Branch <= 0;
@@ -270,7 +275,6 @@ module riscv_basic_pipeline
             mem_rs2 <= 0;
         end else begin
             mem_PC <= ex_PC;
-            mem_ALUSrc <= ex_ALUSrc;
             mem_MemWrite <= ex_MemWrite;
             mem_MemRead <= ex_MemRead;
             mem_Branch <= ex_Branch;
@@ -289,23 +293,25 @@ module riscv_basic_pipeline
     //////////////////////////////////////////////////////////////////////
     // WB: Write Back
     //////////////////////////////////////////////////////////////////////	
-    logic[XLEN - 1:0] wb_RegWriteData, wb_ReadData, wb_MemToReg, wb_aluResult;
-    logic Instruction wb_instruction;
+    logic[XLEN - 1:0] wb_RegWriteData, wb_MemToReg, wb_aluResult, wb_RegWrite;
+    riscv_core_p::Instruction wb_instruction;
 
-    assign wb_RegWriteData = wb_MemToReg ? wb_ReadData : wb_aluResult;
+    assign wb_RegWriteData = wb_MemToReg ? dReadData : wb_aluResult;
+    assign WriteBackData = wb_RegWriteData;
 
+    // Pipelines the 
     always_ff@(posedge clk)
         if (rst) begin
             wb_instruction <= 0;
-            wb_ReadData <= 0;
             wb_MemToReg <= 0;
             wb_aluResult <= 0;
+            wb_RegWrite <= 0;
         end
         else begin
             wb_instruction <= mem_instruction;
-            wb_ReadData <= dReadData;
             wb_MemToReg <= mem_MemtoReg;
             wb_aluResult <= mem_aluResult;
+            wb_RegWrite <= mem_RegWrite;
         end
 
 endmodule

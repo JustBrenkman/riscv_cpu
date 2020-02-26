@@ -1,0 +1,107 @@
+##################################################################################
+# Text Segment
+##################################################################################
+ Address    Code        Basic                     Source
+
+0x00000000  0x00100093  addi x1,x0,0x00000001 24   	addi x1, x0, 1			# Assembly Version major (1)
+0x00000004  0x00100113  addi x2,x0,0x00000001 25   	addi x2, x0, 1			# Version minor (1)
+0x00000008  0x40000093  addi x1,x0,0x00000400 41   	addi x1, x0, 1024 		# Add immediate with pos v (x1=0x400)
+0x0000000c  0xfff00113  addi x2,x0,0xffffffff 42   	addi x2, x0, -1			# Add immediate with neg value: x2 = 0xffffffff (-1)
+0x00000010  0x0ff06193  ori x3,x0,0x000000ff  43   	ori x3, x0, 0xff		# Basic positive ori : x3 = 0xff
+0x00000014  0x001080b3  add x1,x1,x1          44   	add x1, x1, x1			# regiser operation: Double x1 (x1=0x800)
+0x00000018  0x0ff17293  andi x5,x2,0x000000ff 45   	andi x5, x2, 0xff		# and immediate pos value : x5 = 0xffffffff & 0xff = 0xff
+0x0000001c  0x40218233  sub x4,x3,x2          46   	sub x4, x3, x2			# Subtract : x4 = 0xff - 0xffffffff (255-(-1)) = 256 or 0x100
+0x00000020  0x001080b3  add x1,x1,x1          47   	add x1, x1, x1			# Add operation: Double x1 : x1 = 0x1000
+0x00000024  0x0fe1a313  slti x6,x3,0x000000fe 48   	slti x6, x3, 0xfe 		# slti : x3 < 0xfe = false, x6=0
+0x00000028  0x1011a393  slti x7,x3,0x00000101 49   	slti x7, x3, 0x101		# slti : x3 < 0x101 = true, x7=1
+0x0000002c  0x00100013  addi x0,x0,0x00000001 50   	addi x0, x0, 1			# make sure you can't write to register 0. x0 = 0
+0x00000030  0x05a14413  xori x8,x2,0x0000005a 51   	xori x8, x2, 0x5a		# xor immediate. x8 = 0xffffffff ^ 0x5a = 0xffffffa5
+0x00000034  0x02100c63  beq x0,x1,0x0000001c  57   	beq x0, x1, SKIP		# Branch not taken  (x0 /= x1)
+0x00000038  0x00000013  addi x0,x0,0x00000000 59   	nop
+0x0000003c  0x00000013  addi x0,x0,0x00000000 60   	nop
+0x00000040  0x00000013  addi x0,x0,0x00000000 61   	nop
+0x00000044  0x000187b3  add x15,x3,x0         63   	add x15, x3, x0			# should execute this instruction  (x15 = x3 or 0xff)
+0x00000048  0x00000013  addi x0,x0,0x00000000 64   	nop
+0x0000004c  0x00000013  addi x0,x0,0x00000000 65   	nop
+0x00000050  0x00378e63  beq x15,x3,0x0000000e 67   	beq x15, x3, SKIP		# This branch should be taken (x15 = x3 = 0xff)
+0x00000054  0x00000013  addi x0,x0,0x00000000 68   	NOP
+0x00000058  0x00000013  addi x0,x0,0x00000000 69   	NOP
+0x0000005c  0x00000013  addi x0,x0,0x00000000 70   	NOP
+0x00000060  0x00d707b3  add x15,x14,x13       71   	add x15, x14, x13  		# should not be executed
+0x00000064  0x40a60733  sub x14,x12,x10       72   	sub x14, x12, x10  		# should not be executed
+0x00000068  0x00c5f6b3  and x13,x11,x12       73   	and x13, x11, x12  		# should not be executed
+0x0000006c  0x40000993  addi x19,x0,0x0000040085   	addi x19, x0, 0x400		# Setup x19 with pointer to 0x2000 (start at 0x400)
+0x00000070  0x00000013  addi x0,x0,0x00000000 86   	NOP
+0x00000074  0x00000013  addi x0,x0,0x00000000 87   	NOP
+0x00000078  0x013989b3  add x19,x19,x19       88   	add x19, x19, x19		# Add to self (x19 = 0x800)
+0x0000007c  0x00000013  addi x0,x0,0x00000000 89   	NOP
+0x00000080  0x00000013  addi x0,x0,0x00000000 90   	NOP
+0x00000084  0x013989b3  add x19,x19,x19       91   	add x19, x19, x19		# Add to self (x19 = 0x1000)
+0x00000088  0x00000013  addi x0,x0,0x00000000 92   	NOP
+0x0000008c  0x00000013  addi x0,x0,0x00000000 93   	NOP
+0x00000090  0x013989b3  add x19,x19,x19       94   	add x19, x19, x19		# Add to self (x19 = 0x2000). Now points to .data
+0x00000094  0x00000013  addi x0,x0,0x00000000 95   	NOP
+0x00000098  0x00000013  addi x0,x0,0x00000000 96   	NOP
+0x0000009c  0x04098a13  addi x20,x19,0x000000498   	addi x20, x19, 64		# Create x20 as a pointer to 0x2040
+0x000000a0  0x0009a483  lw x9,0x00000000(x19) 106  	lw x9, 0(x19)			# Load word at 0x2000+0 (0x11111111)
+0x000000a4  0x0049a503  lw x10,0x00000004(x19)107  	lw x10, 4(x19)			# Load word at 0x2000+4 (0x22222222)
+0x000000a8  0xff0a2583  lw x11,0xfffffff0(x20)108  	lw x11, -16(x20)		# Load word at 0x2040-16 (0x88888888)
+0x000000ac  0xfeca2603  lw x12,0xffffffec(x20)109  	lw x12, -20(x20)		# Load word at 0x2040-20 (0xffffffff)
+0x000000b0  0x40950fb3  sub x31,x10,x9        111  	sub x31, x10, x9		# x31 = 22222222 - 11111111 = 11111111 (x10 and x9 should be ready)	
+0x000000b4  0x0109a683  lw x13,0x00000010(x19)112  	lw x13, 16(x19)			# Load word (0x55555555)
+0x000000b8  0x0149a703  lw x14,0x00000014(x19)113  	lw x14, 20(x19)			# Load word (0x66666666)
+0x000000bc  0x009f8a63  beq x31,x9,0x0000000a 114  	beq x31, x9, SKIP2		# x31 (11111111) == x9 (11111111). Should be taken
+0x000000c0  0x00b045b3  xor x11,x0,x11        118  	xor x11, x0, x11		# Should not be executed
+0x000000c4  0x00c04633  xor x12,x0,x12        120  	xor x12, x0, x12		# Should not be executed
+0x000000c8  0x00000013  addi x0,x0,0x00000000 121  	NOP
+0x000000cc  0x00000013  addi x0,x0,0x00000000 122  	NOP
+0x000000d0  0x40d70fb3  sub x31,x14,x13       125  	sub x31, x14, x13		# SKIP2: x31=0x66666666 - 0x55555555 = 0x11111111
+0x000000d4  0x0189a783  lw x15,0x00000018(x19)126  	lw x15, 24(x19)			# Load word at 0x2000+24 (0x77777777)
+0x000000d8  0x01c9a803  lw x16,0x0000001c(x19)127  	lw x16, 28(x19)			# Load word at 0x2000+28 (0xffffffff)
+0x000000dc  0x009f8a63  beq x31,x9,0x0000000a 130  	beq x31, x9, STORE		# 0x11111111==0x11111111 (should be taken)
+0x000000e0  0x00000013  addi x0,x0,0x00000000 131  	NOP
+0x000000e4  0x00000013  addi x0,x0,0x00000000 132  	NOP
+0x000000e8  0x00000013  addi x0,x0,0x00000000 133  	NOP
+0x000000ec  0x06000e63  beq x0,x0,0x0000003e  135  	beq x0, x0, ERROR		# Shouldn't get here. Will branch to error holding point
+0x000000f0  0x0109a023  sw x16,0x00000000(x19)147  	sw x16, 0(x19)			# STORE: store x16 (0xffffffff) to address 0x2000
+0x000000f4  0x0009af83  lw x31,0x00000000(x19)150  	lw x31, 0(x19)			# Read what was written to adress 0x2000 (should be 0xffffffff)
+0x000000f8  0x02a9a023  sw x10,0x00000020(x19)152  	sw x10, 32(x19)			# store x10 (0x22222222) to address 0x2020
+0x000000fc  0x0209af03  lw x30,0x00000020(x19)154  	lw x30, 32(x19)	
+0x00000100  0x01f80a63  beq x16,x31,0x0000000a155  	beq x16, x31, STORE1	# see if we read what we wrote (x16=x31 - should branch)
+0x00000104  0x00000013  addi x0,x0,0x00000000 156  	NOP
+0x00000108  0x00000013  addi x0,x0,0x00000000 157  	NOP
+0x0000010c  0x00000013  addi x0,x0,0x00000000 158  	NOP
+0x00000110  0x04000c63  beq x0,x0,0x0000002c  159  	beq x0, x0, ERROR		# Should not get here
+0x00000114  0x01e50863  beq x10,x30,0x00000008162  	beq x10, x30, STORE2	# STORE1: see if we read what we wrote (x10=x31 - should branch)
+0x00000118  0x00000013  addi x0,x0,0x00000000 163  	NOP
+0x0000011c  0x00000013  addi x0,x0,0x00000000 164  	NOP
+0x00000120  0x00000013  addi x0,x0,0x00000000 165  	NOP
+0x00000124  0xfeba2623  sw x11,0xffffffec(x20)169  	sw x11, -20(x20)		# Store x11 (0x88888888) to 0x2040 - 20 = 0x202C
+0x00000128  0xfeca2f83  lw x31,0xffffffec(x20)170  	lw x31, -20(x20)		# Read what we wrote
+0x0000012c  0x00000013  addi x0,x0,0x00000000 171  	NOP
+0x00000130  0x00000013  addi x0,x0,0x00000000 172  	NOP
+0x00000134  0x03f58063  beq x11,x31,0x00000010173  	beq x11, x31, END
+0x00000138  0x00000013  addi x0,x0,0x00000000 174  	NOP
+0x0000013c  0x00000013  addi x0,x0,0x00000000 175  	NOP
+0x00000140  0x00000013  addi x0,x0,0x00000000 176  	NOP
+0x00000144  0x02000263  beq x0,x0,0x00000012  177  	beq x0, x0, ERROR		#Shouldn't get here. If so, branch to ERROR
+0x00000148  0x00000013  addi x0,x0,0x00000000 178  	NOP
+0x0000014c  0x00000013  addi x0,x0,0x00000000 179  	NOP
+0x00000150  0x00000013  addi x0,x0,0x00000000 180  	NOP
+0x00000154  0x00100073  ebreak                183  	ebreak					# END: ebreak: simluator will halt when it gets here
+0x00000158  0x00000013  addi x0,x0,0x00000000 184  	NOP
+0x0000015c  0x00000013  addi x0,x0,0x00000000 185  	NOP
+0x00000160  0x00000013  addi x0,x0,0x00000000 186  	NOP
+0x00000164  0x00000013  addi x0,x0,0x00000000 187  	NOP
+0x00000168  0x00000063  beq x0,x0,0x00000000  190  	beq x0, x0 ERROR		# ERROR: Branch back to self
+0x0000016c  0x00000013  addi x0,x0,0x00000000 191  	NOP
+0x00000170  0x00000013  addi x0,x0,0x00000000 192  	NOP
+0x00000174  0x00000013  addi x0,x0,0x00000000 193  	NOP
+0x00000178  0x00000013  addi x0,x0,0x00000000 194  	NOP
+##################################################################################
+# Data Segment
+##################################################################################
+0x00002000    0x11111111 0x22222222 0x33333333 0x44444444 0x55555555 0x66666666 0x77777777 0xffffffff 
+0x00002020    0x88888888 0x99999999 0xaaaaaaaa 0xbbbbbbbb 0xcccccccc 0xdddddddd 0xeeeeeeee 0xa5a55a5a 
+0x00002040    0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 
+0x00002060    0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000 
