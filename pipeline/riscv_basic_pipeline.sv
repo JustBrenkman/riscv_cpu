@@ -146,7 +146,7 @@ module riscv_basic_pipeline
         ex_rs1 <= id_registerFile[id_instruction.register.rs1];
         ex_rs2 <= id_registerFile[id_instruction.register.rs2];
 
-        if (wb_RegWrite && wb_instruction.register.rd != ZERO) begin 
+        if (wb_RegWrite && wb_instruction.register.rd != ZERO) begin -
             id_registerFile[wb_instruction.register.rd] <= wb_RegWriteData;
             if (id_instruction.register.rs1 == wb_instruction.register.rd)
                 ex_rs1 <= wb_RegWriteData;
