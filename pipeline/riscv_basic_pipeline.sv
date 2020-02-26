@@ -299,7 +299,7 @@ module riscv_basic_pipeline
     assign wb_RegWriteData = wb_MemToReg ? dReadData : wb_aluResult;
     assign WriteBackData = wb_RegWriteData;
 
-    // Pipelines the 
+    // Pipelines the MEM stage controls and results to the WB stage.
     always_ff@(posedge clk)
         if (rst) begin
             wb_instruction <= 0;
