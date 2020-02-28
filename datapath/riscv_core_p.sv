@@ -16,8 +16,12 @@
 package riscv_core_p;
     // Riscv instruction lenght.
     localparam RISCV_XLEN = 32;
+    localparam RISCV_FLEN = 32;
     // Riscv number of registers.
     localparam RISCV_REG_NUM = 32;
+    localparam RISCV_INSTR_LEN = 32;
+    localparam RISCV_CSR_LEN = 32;
+    localparam RISCV_CSR_NUM = 4096;
 
     // Lenghts of the various segments of a riscv instruction.
     localparam IMMEDIATE_LEN = 12;
@@ -57,7 +61,6 @@ package riscv_core_p;
     localparam BIT_20 = 20;
     localparam BIT_30 = 30;
     localparam BIT_31 = 31;
-    localparam BIT_32 = 32;
 
     // Funct3 defines for all the different types.
     // These first few are for the ALU.
@@ -90,15 +93,32 @@ package riscv_core_p;
     localparam FUNCT3_BU=3'b100;
     localparam FUNCT3_HU=3'b101;
 
+    localparam NOP_INSTRUCTION = 32'h00000013; // addi x0, x0, 0
+
+    typedef enum logic[11:0] {
+        CSR_FFLAGS=12'h001,
+        CSR_FRM=12'h002,
+        CSR_FCSR=12'h003,
+        CSR_CYCLE=12'hc00,
+        CSR_TIME=12'hc01,
+        CSR_INSTRET=12'hc02,
+        CSR_CYCLEH=12'hc80,
+        CSR_TIMEH=12'hc81,
+        CSR_INSTRETH=12'hc82
+    } CSRAddress;
 
     // ALU Operations enum. NOTE not complete.
     typedef enum logic[3:0] { 
         ALU_AND=4'b0000, 
         ALU_OR=4'b0001, 
-        ALU_ADD=4'b0010, 
+        ALU_ADD=4'b0010,
         ALU_SUB=4'b0110, 
-        ALU_SLT=4'b0111, 
-        ALU_XOR=4'b1100
+        ALU_SLT=4'b0111,
+        ALU_SLTU=4'b1000,
+        ALU_SLL=4'b1001,
+        ALU_SRL=4'b1011,
+        ALU_XOR=4'b1100,
+        ALU_SRA=4'b1101
     } ALUOp;
 
     // Major OpcCodes, not complete.
@@ -111,7 +131,9 @@ package riscv_core_p;
         BRANCH = 7'b1100011,
         OP = 7'b0110011,
         S = 7'b0100011,
-        L = 7'b0000011
+        L = 7'b0000011,
+        FENCE = 7'b0001111,
+        SYSTEM = 7'b1110011
     } OpCode;
 
     // Major OpcCodes, not complete.
@@ -141,11 +163,11 @@ package riscv_core_p;
     // Branch instruction struct for decoding.
     typedef struct packed {
         logic imm12;
-        logic [BIT_10:BIT_5] imm10_5;
-        logic [REGAD_LEN - 1:0] rs2;
-        logic [REGAD_LEN - 1:0] rs1;
+        logic[BIT_10:BIT_5] imm10_5;
+        logic[REGAD_LEN - 1:0] rs2;
+        logic[REGAD_LEN - 1:0] rs1;
         logic[FUNC3_LEN - 1:0] funct3;
-        logic [BIT_4:BIT_1] imm4_1;
+        logic[BIT_4:BIT_1] imm4_1;
         logic imm11;
         OpCode opcode;
     } BranchInstruction;
@@ -160,6 +182,22 @@ package riscv_core_p;
         OpCode opcode;
     } SInstruction;
 
+        // Store/Load instruction struct for decoding.
+    typedef struct packed {
+        logic[BIT_31:BIT_12] imm31_12;
+        logic[REGAD_LEN - 1:0] rd;
+        OpCode opcode;
+    } UInstruction;
+
+    typedef struct packed {
+        logic imm20;
+        logic [BIT_10:BIT_1] imm10_1;
+        logic imm11;
+        logic [BIT_19:BIT_12] imm19_12;
+        logic [REGAD_LEN - 1:0] rd;
+        OpCode opcode;
+    } JInstruction;
+
     // Decodes all the instructions using a union of all the
     // different types.
     typedef union packed {
@@ -167,6 +205,8 @@ package riscv_core_p;
         BranchInstruction branch;
         RegInstruction register;
         ImmInstruction imm;
+        UInstruction u;
+        JInstruction j;
     } Instruction;
 
 endpackage

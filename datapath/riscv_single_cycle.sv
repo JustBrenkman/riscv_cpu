@@ -52,8 +52,7 @@ module riscv_single_cycle
             // Case for immediate and op opcodes.
             OP, IMM: begin
                 case(instruct.register.funct3)
-                    FUNCT3_ADD: ALUCtrl = (instruct.register.opcode == IMM) ? ALU_ADD : 
-                                          instruct.register.funct7 == PRIMARY ? ALU_ADD : ALU_SUB;
+                    FUNCT3_ADD: ALUCtrl = (instruct.register.opcode == IMM) ? ALU_ADD : instruct.register.funct7 == PRIMARY ? ALU_ADD : ALU_SUB;
                     FUNCT3_SLT: ALUCtrl = ALU_SLT;
                     FUNCT3_XOR: ALUCtrl = ALU_XOR;
                     FUNCT3_OR: ALUCtrl = ALU_OR;
