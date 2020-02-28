@@ -14,6 +14,8 @@
 import riscv_core_p::*;
 
 `define SIM
+// `define LOG_CSR
+// `define LOG_REGISTERS
 
 // Basice pipelined riscv core.
 module riscv_basic_pipeline 
@@ -39,6 +41,7 @@ module riscv_basic_pipeline
     logic[XLEN - 1:0] id_PC, id_immediate, ex_rs1, ex_rs2;
     logic id_ALUSrc, id_MemWrite, id_MemRead, id_Branch, id_RegWrite, id_MemtoReg;
     logic[XLEN - 1:0] id_registerFile[RISCV_REG_NUM:0];
+    logic[RISCV_CSR_LEN - 1:0] id_csrFile[RISCV_CSR_NUM:0];
 
     riscv_core_p::Instruction ex_instruction;
     logic[XLEN - 1:0] ex_PC, ex_immediate, ex_aluOp1, ex_aluOp2, ex_aluResult, ex_branchAddress, ex_fpuResult;
@@ -186,6 +189,14 @@ module riscv_basic_pipeline
         integer i;
         for (i = 0; i <= RISCV_REG_NUM; i=i+1) begin
             id_registerFile[i] = ZERO;
+        end
+    end
+
+    // Initial block to initialize the csr file.
+    initial begin
+        integer i;
+        for (i = 0; i <= RISCV_CSR_NUM; i=i+1) begin
+            id_csrFile[i] = ZERO;
         end
     end
 
@@ -363,45 +374,56 @@ module riscv_basic_pipeline
                 $write("auipc\t x%0d, $0d \n", inst.u.rd, inst.u.imm31_12);
             end
             IMM: begin
+                integer immediateVal = {{20 {inst.imm.imm[BIT_11]}}, inst.imm.imm};
                 case(inst.imm.funct3)
-                    FUNCT3_ADD: if(inst != NOP_INSTRUCTION) $write("addi\t\t x%0d, x%0d, 0x%8h \n", inst.imm.rd, inst.imm.rs1, $signed({{20 {inst.imm.imm[BIT_11]}}, inst.imm.imm}));
-                                else $write("nop \n");
-                    FUNCT3_SLT: $write("slti\t\t x%0d, x%0d, 0x%8h \n", inst.imm.rd, inst.imm.rs1, $signed({{20 {inst.imm.imm[BIT_11]}}, inst.imm.imm}));
-                    FUNCT3_SLTU: $write("sltiu \t x%0d, x%0d, 0x%8h \n", inst.imm.rd, inst.imm.rs1, $signed({{20 {inst.imm.imm[BIT_11]}}, inst.imm.imm}));
-                    FUNCT3_XOR: $write("xori\t\t x%0d, x%0d, 0x%8h \n", inst.imm.rd, inst.imm.rs1, $signed({{20 {inst.imm.imm[BIT_11]}}, inst.imm.imm}));
-                    FUNCT3_OR: $write("ori\t\t x%0d, x%0d, 0x%8h\n", inst.imm.rd, inst.imm.rs1, $signed({{20 {inst.imm.imm[BIT_11]}}, inst.imm.imm}));
-                    FUNCT3_AND: $write("andi\t\t x%0d, x%0d, 0x%8h \n", inst.imm.rd, inst.imm.rs1, $signed({{20 {inst.imm.imm[BIT_11]}}, inst.imm.imm}));
-                    FUNCT3_SLL: $write("slli\t x%0d, x%0d, 0x%8h \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                    FUNCT3_ADD: 
+                        if(inst != NOP_INSTRUCTION) 
+                            $write("addi\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.imm.rd, inst.imm.rs1, $signed(immediateVal), $signed(immediateVal));
+                        else $write("nop \n");
+                    FUNCT3_SLT: $write("slti\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.imm.rd, inst.imm.rs1, $signed(immediateVal), $signed(immediateVal));
+                    FUNCT3_SLTU: $write("sltiu \t x%0d, x%0d, 0x%8h (%0d) \n", inst.imm.rd, inst.imm.rs1, $signed(immediateVal), $signed(immediateVal));
+                    FUNCT3_XOR: $write("xori\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.imm.rd, inst.imm.rs1, $signed(immediateVal), $signed(immediateVal));
+                    FUNCT3_OR: $write("ori\t\t x%0d, x%0d, 0x%8h (%0d)\n", inst.imm.rd, inst.imm.rs1, $signed(immediateVal), $signed(immediateVal));
+                    FUNCT3_AND: $write("andi\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.imm.rd, inst.imm.rs1, $signed(immediateVal), $signed(immediateVal));
+                    FUNCT3_SLL: $write("slli\t x%0d, x%0d, 0x%8h (%0d) \n", inst.register.rd, inst.register.rs1, inst.register.rs2, inst.register.rs2);
                     FUNCT3_SRL: 
                         if (inst.register.funct7 == PRIMARY)
-                            $write("srai\t x%0d, x%0d, 0x%0h \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
-                            else $write("srli\t x%0d, x%0d, 0x%0h \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                            $write("srai\t x%0d, x%0d, 0x%8h (%0d) \n", inst.register.rd, inst.register.rs1, inst.register.rs2, inst.register.rs2);
+                        else 
+                            $write("srli\t x%0d, x%0d, 0x%8h (%0d) \n", inst.register.rd, inst.register.rs1, inst.register.rs2, inst.register.rs2);
                     default: $write("Unimplemented \n");
                 endcase
             end
             BRANCH: begin
+                integer immediateBVal = {{19 {inst.branch.imm12}}, inst.branch.imm11, inst.branch.imm10_5, inst.branch.imm4_1, 1'b0};
                 case(inst.branch.funct3)
-                    FUNCT3_BEQ: $write("beq\t\t x%0d, x%0d, 0x%8h \n", inst.branch.rs1, inst.branch.rs2, $signed({{19 {inst.branch.imm12}}, inst.branch.imm11, inst.branch.imm10_5, inst.branch.imm4_1, 1'b0}));
-                    FUNCT3_BNE: $write("bne\t\t x%0d, x%0d, 0x%8h \n", inst.branch.rs1, inst.branch.rs2, $signed({{19 {inst.branch.imm12}}, inst.branch.imm11, inst.branch.imm10_5, inst.branch.imm4_1, 1'b0}));
-                    FUNCT3_BLT: $write("blt\t\t x%0d, x%0d, 0x%8h \n", inst.branch.rs1, inst.branch.rs2, $signed({{19 {inst.branch.imm12}}, inst.branch.imm11, inst.branch.imm10_5, inst.branch.imm4_1, 1'b0}));
-                    FUNCT3_BLTU: $write("bltu\t x%0d, x%0d, 0x%8h \n", inst.branch.rs1, inst.branch.rs2, $signed({{19 {inst.branch.imm12}}, inst.branch.imm11, inst.branch.imm10_5, inst.branch.imm4_1, 1'b0}));
-                    FUNCT3_BGE: $write("bge\t\t x%0d, x%0d, 0x%8h \n", inst.branch.rs1, inst.branch.rs2, $signed({{19 {inst.branch.imm12}}, inst.branch.imm11, inst.branch.imm10_5, inst.branch.imm4_1, 1'b0}));
-                    FUNCT3_BGEU: $write("bgeu\t x%0d, x%0d, 0x%8h \n", inst.branch.rs1, inst.branch.rs2, $signed({{19 {inst.branch.imm12}}, inst.branch.imm11, inst.branch.imm10_5, inst.branch.imm4_1, 1'b0}));
+                    FUNCT3_BEQ: $write("beq\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.branch.rs1, inst.branch.rs2, $signed(immediateBVal), $signed(immediateBVal));
+                    FUNCT3_BNE: $write("bne\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.branch.rs1, inst.branch.rs2, $signed(immediateBVal), $signed(immediateBVal));
+                    FUNCT3_BLT: $write("blt\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.branch.rs1, inst.branch.rs2, $signed(immediateBVal), $signed(immediateBVal));
+                    FUNCT3_BLTU: $write("bltu\t x%0d, x%0d, 0x%8h (%0d) \n", inst.branch.rs1, inst.branch.rs2, $signed(immediateBVal), $signed(immediateBVal));
+                    FUNCT3_BGE: $write("bge\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.branch.rs1, inst.branch.rs2, $signed(immediateBVal), $signed(immediateBVal));
+                    FUNCT3_BGEU: $write("bgeu\t x%0d, x%0d, 0x%8h (%0d) \n", inst.branch.rs1, inst.branch.rs2, $signed(immediateBVal), $signed(immediateBVal));
                     default: $write("Unimplemented \n");
                 endcase    
             end
             OP: begin
                 case(inst.imm.funct3)
-                    FUNCT3_ADD: if(inst == NOP_INSTRUCTION) $write("nop \n"); else if (inst.register.funct7 == PRIMARY) $write("add\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2); 
-                                else $write("sub\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                    FUNCT3_ADD: 
+                        if(inst == NOP_INSTRUCTION) 
+                            $write("nop \n"); else if (inst.register.funct7 == PRIMARY) $write("add\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2); 
+                        else 
+                            $write("sub\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
                     FUNCT3_SLT: $write("slt\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
                     FUNCT3_SLTU: $write("sltu\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
                     FUNCT3_XOR: $write("xor\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
                     FUNCT3_OR: $write("or\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
                     FUNCT3_AND: $write("and\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
                     FUNCT3_SLL: $write("sll\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
-                    FUNCT3_SRL: if (inst.register.funct7 == PRIMARY) $write("sra\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2); 
-                                else $write("srl\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                    FUNCT3_SRL: 
+                        if (inst.register.funct7 == PRIMARY) 
+                            $write("sra\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2); 
+                        else 
+                            $write("srl\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
                     default: $write("Unimplemented \n");
                 endcase
             end
@@ -423,11 +445,23 @@ module riscv_basic_pipeline
                     default: $write("Unimplemented \n");
                 endcase
             end
+            FENCE: begin
+                $write("fence\n");
+            end
+            SYSTEM: begin
+                if(inst.imm.imm == 12'b0)
+                    $write("ecall\n");
+                else
+                    $write("ebreak\n");
+            end
             default: $write("Uknown Instruction\n");
         endcase
     endfunction
 
     always_ff@(negedge clk) begin
+        `ifdef LOG_CSR
+            $write("\t  fcsr: \t0x%h\t\tcycle: \t0x%h\t\ttime: \t0x%h\n", id_csrFile[CSR_FCSR], id_csrFile[CSR_CYCLE], id_csrFile[CSR_TIME]);
+        `endif
         `ifdef LOG_REGISTERS
         integer i, j, c;
         c = 0;

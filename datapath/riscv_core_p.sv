@@ -19,6 +19,8 @@ package riscv_core_p;
     // Riscv number of registers.
     localparam RISCV_REG_NUM = 32;
     localparam RISCV_INSTR_LEN = 32;
+    localparam RISCV_CSR_LEN = 32;
+    localparam RISCV_CSR_NUM = 4096;
 
     // Lenghts of the various segments of a riscv instruction.
     localparam IMMEDIATE_LEN = 12;
@@ -58,7 +60,6 @@ package riscv_core_p;
     localparam BIT_20 = 20;
     localparam BIT_30 = 30;
     localparam BIT_31 = 31;
-    localparam BIT_32 = 32;
 
     // Funct3 defines for all the different types.
     // These first few are for the ALU.
@@ -93,6 +94,18 @@ package riscv_core_p;
 
     localparam NOP_INSTRUCTION = 32'h00000013; // addi x0, x0, 0
 
+    typedef enum logic[11:0] {
+        CSR_FFLAGS=12'h001,
+        CSR_FRM=12'h002,
+        CSR_FCSR=12'h003,
+        CSR_CYCLE=12'hc00,
+        CSR_TIME=12'hc01,
+        CSR_INSTRET=12'hc02,
+        CSR_CYCLEH=12'hc80,
+        CSR_TIMEH=12'hc81,
+        CSR_INSTRETH=12'hc82
+    } CSRAddress;
+
     // ALU Operations enum. NOTE not complete.
     typedef enum logic[3:0] { 
         ALU_AND=4'b0000, 
@@ -117,7 +130,9 @@ package riscv_core_p;
         BRANCH = 7'b1100011,
         OP = 7'b0110011,
         S = 7'b0100011,
-        L = 7'b0000011
+        L = 7'b0000011,
+        FENCE = 7'b0001111,
+        SYSTEM = 7'b1110011
     } OpCode;
 
     // Major OpcCodes, not complete.
