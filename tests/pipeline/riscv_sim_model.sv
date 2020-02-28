@@ -5,15 +5,33 @@
 //  Filename: riscv_pipeline_tb.v
 //
 //  Author: Mike Wirthlin
+//  Modified: Ben Brenkman
 //  
 //  Version 1.2 (1/29/2020)
 //
 //   
 //////////////////////////////////////////////////////////////////////////////////
 
-module riscv_sim_model #(parameter INITIAL_PC = 32'h00400000, DATA_MEMORY_START_ADDRESSS = 32'h10010000) 
-	(tb_clk, tb_rst, tb_PC, tb_Instruction, tb_ALUResult, tb_dAddress, tb_dWriteData, 
-	tb_dReadData, tb_MemRead, tb_MemWrite, tb_WriteBackData, inst_mem_filename, data_mem_filename, error_count);
+module riscv_sim_model 
+#(
+	parameter INITIAL_PC = 32'h00400000, 
+	DATA_MEMORY_START_ADDRESSS = 32'h10010000
+) 
+(
+	tb_clk, tb_rst, 
+	tb_PC, 
+	tb_Instruction, 
+	tb_ALUResult, 
+	tb_dAddress, 
+	tb_dWriteData, 
+	tb_dReadData, 
+	tb_MemRead, 
+	tb_MemWrite, 
+	tb_WriteBackData, 
+	inst_mem_filename, 
+	data_mem_filename,
+	error_count
+);
 
 	input tb_clk, tb_rst;
 	input [31:0] tb_PC, tb_Instruction;
@@ -148,87 +166,87 @@ https://forums.xilinx.com/t5/Simulation-and-Verification/readmemh-doesn-t-suppor
 	*/
 		
 	// checking
-	always@(negedge tb_clk) begin
+	// always@(negedge tb_clk) begin
 		
-		if ($time != 0) begin
-			$write("%0t:",$time);
-			if (errors > 0)
-				$display(" (%0d errors)",errors);
-			else
-				$display("No Errors");
+	// 	if ($time != 0) begin
+	// 		$write("%0t:",$time);
+	// 		if (errors > 0)
+	// 			$display(" (%0d errors)",errors);
+	// 		else
+	// 			$display("No Errors");
 			
-			$write("  IF: PC=0x%8h",tb_PC);
-			if (if_PC != tb_PC) begin
-				$display(" ** ERR** expecting PC=%h", if_PC);
-				errors = errors + 1;
-			end
-			else $display();
+	// 		$write("  IF: PC=0x%8h",tb_PC);
+	// 		if (if_PC != tb_PC) begin
+	// 			$display(" ** ERR** expecting PC=%h", if_PC);
+	// 			errors = errors + 1;
+	// 		end
+	// 		else $display();
 				
-			$write("  ID: PC=0x%8h I=0x%8h [%s]",pc_id,tb_Instruction, stage_state(tb_Instruction));
-			if (tb_Instruction != instruction_if) begin
-				$display(" ** ERR** expecting Instruction=%h", instruction_id);
-				errors = errors + 1;
-			end
-			else $display();
+	// 		$write("  ID: PC=0x%8h I=0x%8h [%s]",pc_id,tb_Instruction, stage_state(tb_Instruction));
+	// 		if (tb_Instruction != instruction_if) begin
+	// 			$display(" ** ERR** expecting Instruction=%h", instruction_id);
+	// 			errors = errors + 1;
+	// 		end
+	// 		else $display();
 			
-			$write("  EX: PC=0x%8h I=0x%8h [%s] alu result=0x%h ",pc_ex,tb_instruction_ex,stage_state(tb_instruction_ex),tb_ALUResult);
-			if (tb_ALUResult != ex_alu_result) begin
-				$display(" ** ERR** expecting alu result=%h", ex_alu_result);
-				errors = errors + 1;
-			end
-			else $display();
+	// 		$write("  EX: PC=0x%8h I=0x%8h [%s] alu result=0x%h ",pc_ex,tb_instruction_ex,stage_state(tb_instruction_ex),tb_ALUResult);
+	// 		if (tb_ALUResult != ex_alu_result) begin
+	// 			$display(" ** ERR** expecting alu result=%h", ex_alu_result);
+	// 			errors = errors + 1;
+	// 		end
+	// 		else $display();
 
-			$write("  MEM:PC=0x%8h I=0x%8h [%s] ",pc_mem,tb_instruction_mem, stage_state(tb_instruction_mem));
-			if (tb_MemRead == 1'b0 && tb_MemWrite == 1'b0)
-				if (mem_MemRead) begin 
-					$write("*** ERR: No memory read ");
-					errors = errors + 1;
-				end else if (mem_MemWrite) begin
-					$write("*** ERR: No memory write ");
-					errors = errors + 1;
-				end else $write("No memory read/write ");
-			else if (tb_MemRead == 1'b1 && tb_MemWrite == 1'b0)
-				if (!mem_MemRead) begin
-					$write("*** ERR: No Memory read ***");
-					errors = errors + 1;
-				end else if (mem_MemWrite) begin
-					$write("*** ERR: Need Memory Write ***");
-					errors = errors + 1;
-				end else if (tb_dAddress != mem_dAddress) begin
-					$write("*** Err: Memory Read to address 0x%1h but expecting address 0x%1h",tb_dAddress,mem_dAddress);
-					errors = errors + 1;
-				end else $write("Memory Read from address 0x%1h ",tb_dAddress);  // Note: data not ready until next cycle
-			else if (tb_MemRead == 1'b0 && tb_MemWrite == 1'b1)
-				if (!mem_MemWrite) begin
-					$write("*** ERR: No Memory write ***");
-					errors = errors + 1;
-				end else if (mem_MemRead) begin
-					$write("*** ERR: Need Memory Read ***");
-					errors = errors + 1;
-				end else if (tb_dAddress != mem_dAddress) begin
-					$write("*** Err: Memory Write to address 0x%1h but expecting address 0x%1h",tb_dAddress,mem_dAddress);
-					errors = errors + 1;
-				end else if (tb_dWriteData != mem_dWriteData) begin
-					$write("*** Err: Memory Write value 0x%1h but expecting value 0x%1h",tb_dWriteData,mem_dWriteData);
-					errors = errors + 1;
-				end else $write("Memory Write 0x%1h to address 0x%1h ",tb_dWriteData,tb_dAddress);
-			else begin
-				$write("*** ERROR: simultaneous read and write ");
-				errors = errors + 1;				
-			end
-			$display();
+	// 		$write("  MEM:PC=0x%8h I=0x%8h [%s] ",pc_mem,tb_instruction_mem, stage_state(tb_instruction_mem));
+	// 		if (tb_MemRead == 1'b0 && tb_MemWrite == 1'b0)
+	// 			if (mem_MemRead) begin 
+	// 				$write("*** ERR: No memory read ");
+	// 				errors = errors + 1;
+	// 			end else if (mem_MemWrite) begin
+	// 				$write("*** ERR: No memory write ");
+	// 				errors = errors + 1;
+	// 			end else $write("No memory read/write ");
+	// 		else if (tb_MemRead == 1'b1 && tb_MemWrite == 1'b0)
+	// 			if (!mem_MemRead) begin
+	// 				$write("*** ERR: No Memory read ***");
+	// 				errors = errors + 1;
+	// 			end else if (mem_MemWrite) begin
+	// 				$write("*** ERR: Need Memory Write ***");
+	// 				errors = errors + 1;
+	// 			end else if (tb_dAddress != mem_dAddress) begin
+	// 				$write("*** Err: Memory Read to address 0x%1h but expecting address 0x%1h",tb_dAddress,mem_dAddress);
+	// 				errors = errors + 1;
+	// 			end else $write("Memory Read from address 0x%1h ",tb_dAddress);  // Note: data not ready until next cycle
+	// 		else if (tb_MemRead == 1'b0 && tb_MemWrite == 1'b1)
+	// 			if (!mem_MemWrite) begin
+	// 				$write("*** ERR: No Memory write ***");
+	// 				errors = errors + 1;
+	// 			end else if (mem_MemRead) begin
+	// 				$write("*** ERR: Need Memory Read ***");
+	// 				errors = errors + 1;
+	// 			end else if (tb_dAddress != mem_dAddress) begin
+	// 				$write("*** Err: Memory Write to address 0x%1h but expecting address 0x%1h",tb_dAddress,mem_dAddress);
+	// 				errors = errors + 1;
+	// 			end else if (tb_dWriteData != mem_dWriteData) begin
+	// 				$write("*** Err: Memory Write value 0x%1h but expecting value 0x%1h",tb_dWriteData,mem_dWriteData);
+	// 				errors = errors + 1;
+	// 			end else $write("Memory Write 0x%1h to address 0x%1h ",tb_dWriteData,tb_dAddress);
+	// 		else begin
+	// 			$write("*** ERROR: simultaneous read and write ");
+	// 			errors = errors + 1;				
+	// 		end
+	// 		$display();
 
-			$write("  WB: PC=0x%8h I=0x%8h [%s] ",pc_wb,tb_instruction_wb,stage_state(tb_instruction_wb));
-			$write("WriteBackData=0x%h ",tb_WriteBackData);
-			if (!(tb_WriteBackData === wb_writedata)) begin
-				$display(" ** ERR** expecting to write back data=%h", wb_writedata);
-				errors = errors + 1;
-			end else if (^tb_WriteBackData === 1'bX || ^wb_writedata === 1'bX) begin
-				$display(" ** ERR** Write back data is undefined=%h", wb_writedata);
-				errors = errors + 1;
-			end else $display();
-		end
-	end
+	// 		$write("  WB: PC=0x%8h I=0x%8h [%s] ",pc_wb,tb_instruction_wb,stage_state(tb_instruction_wb));
+	// 		$write("WriteBackData=0x%h ",tb_WriteBackData);
+	// 		if (!(tb_WriteBackData === wb_writedata)) begin
+	// 			$display(" ** ERR** expecting to write back data=%h", wb_writedata);
+	// 			errors = errors + 1;
+	// 		end else if (^tb_WriteBackData === 1'bX || ^wb_writedata === 1'bX) begin
+	// 			$display(" ** ERR** Write back data is undefined=%h", wb_writedata);
+	// 			errors = errors + 1;
+	// 		end else $display();
+	// 	end
+	// end
 
 	localparam NOP_INSTRUCTION = 32'h00000013; // addi x0, x0, 0
 	

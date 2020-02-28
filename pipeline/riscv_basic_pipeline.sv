@@ -1,3 +1,4 @@
+`timescale 1ns / 100ps
 /***************************************************************************
 * 
 * Module: riscv_basic_pipeline
@@ -11,6 +12,8 @@
 ****************************************************************************/
 
 import riscv_core_p::*;
+
+`define SIM
 
 // Basice pipelined riscv core.
 module riscv_basic_pipeline 
@@ -30,6 +33,26 @@ module riscv_basic_pipeline
     output logic[XLEN - 1:0] dWriteData,
     output logic[XLEN - 1:0] WriteBackData
 );
+
+    riscv_core_p::Instruction id_instruction;
+    riscv_core_p::ALUOp id_ALUCtrl;
+    logic[XLEN - 1:0] id_PC, id_immediate, ex_rs1, ex_rs2;
+    logic id_ALUSrc, id_MemWrite, id_MemRead, id_Branch, id_RegWrite, id_MemtoReg;
+    logic[XLEN - 1:0] id_registerFile[RISCV_REG_NUM:0];
+
+    riscv_core_p::Instruction ex_instruction;
+    logic[XLEN - 1:0] ex_PC, ex_immediate, ex_aluOp1, ex_aluOp2, ex_aluResult, ex_branchAddress, ex_fpuResult;
+    logic ex_ALUSrc, ex_MemWrite, ex_MemRead, ex_Branch, ex_RegWrite, ex_MemtoReg, ex_Zero;
+    riscv_core_p::ALUOp ex_ALUCtrl;
+
+    riscv_core_p::Instruction mem_instruction;
+    logic[XLEN - 1:0] mem_aluResult, mem_branchAddress, mem_rs2;
+    logic mem_MemWrite, mem_MemRead, mem_Branch, mem_RegWrite, mem_MemtoReg, mem_Zero, mem_PCSrc;
+
+    logic[XLEN - 1:0] wb_RegWriteData, wb_MemToReg, wb_aluResult, wb_RegWrite;
+    riscv_core_p::Instruction wb_instruction;
+
+    // fpu_core fpu(.clk(clk), .rst(rst), .start(), .op(), .a(ex_aluOp1), .b(ex_aluOp2), .busy(), .result(ex_fpuResult));
 
     //////////////////////////////////////////////////////////////////////
     // IF: Instruction Fetch
@@ -52,11 +75,6 @@ module riscv_basic_pipeline
     //////////////////////////////////////////////////////////////////////
     // ID: Instruction Decode
     //////////////////////////////////////////////////////////////////////	
-    riscv_core_p::Instruction id_instruction;
-    riscv_core_p::ALUOp id_ALUCtrl;
-    logic[XLEN - 1:0] id_PC, id_immediate, ex_rs1, ex_rs2;
-    logic id_ALUSrc, id_MemWrite, id_MemRead, id_Branch, id_RegWrite, id_MemtoReg;
-    logic[XLEN - 1:0] id_registerFile[RISCV_REG_NUM:0];
 
     assign id_instruction = instruction;
 
@@ -82,11 +100,14 @@ module riscv_basic_pipeline
                     FUNCT3_XOR: id_ALUCtrl = ALU_XOR;
                     FUNCT3_OR: id_ALUCtrl = ALU_OR;
                     FUNCT3_AND: id_ALUCtrl = ALU_AND;
+                    FUNCT3_SLL: id_ALUCtrl = ALU_SLL;
+                    FUNCT3_SLTU: id_ALUCtrl = ALU_SLTU;
+                    FUNCT3_SRL: id_ALUCtrl = ALU_SRL;
                     default: id_ALUCtrl = ALU_AND;
                 endcase
                 id_Branch = 0;
                 // Select the immediate src if immediate opcode.
-                id_ALUSrc = id_instruction.register.opcode == IMM;
+                id_ALUSrc = id_instruction.register.opcode == IMM && id_instruction.register.funct3 != FUNCT3_SRL && id_instruction.register.funct3 != FUNCT3_SLL && id_instruction.register.funct3 != FUNCT3_SRA;
                 id_MemtoReg = 0;
                 id_RegWrite = 1;
                 id_MemRead = 0;
@@ -97,6 +118,11 @@ module riscv_basic_pipeline
                 // ALUCtrl logic to help determine if the branch needs to be taken.
                 case(id_instruction.branch.funct3)
                     FUNCT3_BEQ: id_ALUCtrl = ALU_SUB;
+                    FUNCT3_BNE: id_ALUCtrl = ALU_SUB;
+                    FUNCT3_BLT: id_ALUCtrl = ALU_SLT;
+                    FUNCT3_BLTU: id_ALUCtrl = ALU_SLTU;
+                    FUNCT3_BGE: id_ALUCtrl = ALU_SLT;
+                    FUNCT3_BGEU: id_ALUCtrl = ALU_SLTU;
                     default: id_ALUCtrl = ALU_ADD;
                 endcase
                 id_Branch = 1;
@@ -146,7 +172,7 @@ module riscv_basic_pipeline
         ex_rs1 <= id_registerFile[id_instruction.register.rs1];
         ex_rs2 <= id_registerFile[id_instruction.register.rs2];
 
-        if (wb_RegWrite && wb_instruction.register.rd != ZERO) begin -
+        if (wb_RegWrite && wb_instruction.register.rd != ZERO) begin
             id_registerFile[wb_instruction.register.rd] <= wb_RegWriteData;
             if (id_instruction.register.rs1 == wb_instruction.register.rd)
                 ex_rs1 <= wb_RegWriteData;
@@ -192,10 +218,6 @@ module riscv_basic_pipeline
     //////////////////////////////////////////////////////////////////////
     // EX: Execute
     //////////////////////////////////////////////////////////////////////	
-    riscv_core_p::Instruction ex_instruction;
-    logic[XLEN - 1:0] ex_PC, ex_immediate, ex_aluOp1, ex_aluOp2, ex_aluResult, ex_branchAddress;
-    logic ex_ALUSrc, ex_MemWrite, ex_MemRead, ex_Branch, ex_RegWrite, ex_MemtoReg, ex_Zero;
-    riscv_core_p::ALUOp ex_ALUCtrl;
     
     assign ex_aluOp1 = ex_rs1;
     assign ex_aluOp2 = ex_ALUSrc ? ex_immediate : ex_rs2;
@@ -240,6 +262,10 @@ module riscv_basic_pipeline
             ALU_XOR: ex_aluResult = ex_aluOp1 ^ ex_aluOp2;
             ALU_AND: ex_aluResult = ex_aluOp1 & ex_aluOp2;
             ALU_SLT: ex_aluResult = $signed(ex_aluOp1) < $signed(ex_aluOp2);
+            ALU_SLTU: ex_aluResult = ex_aluOp1 < ex_aluOp2;
+            ALU_SLL: ex_aluResult = ex_aluOp1 << ex_aluOp2;
+            ALU_SRL: ex_aluResult = ex_aluOp1 >> ex_aluOp2;
+            ALU_SRA: ex_aluResult = ex_aluOp1 >>> ex_aluOp2;
             default: ex_aluResult = ZERO;
         endcase
     end
@@ -248,11 +274,23 @@ module riscv_basic_pipeline
     //////////////////////////////////////////////////////////////////////
     // MEM: Memory Access
     //////////////////////////////////////////////////////////////////////	
-    riscv_core_p::Instruction mem_instruction;
-    logic[XLEN - 1:0] mem_PC, mem_immediate, mem_aluResult, mem_branchAddress, mem_rs2;
-    logic mem_MemWrite, mem_MemRead, mem_Branch, mem_RegWrite, mem_MemtoReg, mem_Zero, mem_PCSrc;
 
-    assign mem_PCSrc = mem_Branch & mem_Zero;
+    always_comb begin
+        if (mem_Branch)
+            case(mem_instruction.branch.funct3)
+                FUNCT3_BEQ: mem_PCSrc = mem_Zero;
+                FUNCT3_BNE: mem_PCSrc = ~mem_Zero;
+                FUNCT3_BLT: mem_PCSrc = mem_aluResult[0];
+                FUNCT3_BLTU: mem_PCSrc = mem_aluResult[0];
+                FUNCT3_BGE: mem_PCSrc = ~mem_aluResult[0] & mem_Zero;
+                FUNCT3_BGEU: mem_PCSrc = ~mem_aluResult[0] & mem_Zero;
+                default: mem_PCSrc = 0;
+            endcase
+        else 
+            mem_PCSrc = 0;
+    end
+
+    // assign mem_PCSrc = mem_Branch & mem_Zero;
     assign dAddress = mem_aluResult;
     assign dWriteData = mem_rs2;
     assign MemWrite = mem_MemWrite;
@@ -261,27 +299,23 @@ module riscv_basic_pipeline
     // Pipelines the EX stage control signals to the MEM stage.
     always@(posedge clk) begin
         if(rst) begin
-            mem_PC <= 0;
             mem_MemWrite <= 0;
             mem_MemRead <= 0;
             mem_Branch <= 0;
             mem_RegWrite <= 0;
             mem_MemtoReg <= 0;
             mem_instruction <= 0;
-            mem_immediate <= 0;
             mem_branchAddress <= 0;
             mem_Zero <= 0;
             mem_aluResult <= 0;
             mem_rs2 <= 0;
         end else begin
-            mem_PC <= ex_PC;
             mem_MemWrite <= ex_MemWrite;
             mem_MemRead <= ex_MemRead;
             mem_Branch <= ex_Branch;
             mem_RegWrite <= ex_RegWrite;
             mem_MemtoReg <= ex_MemtoReg;
             mem_instruction <= ex_instruction;
-            mem_immediate <= ex_immediate;
             mem_branchAddress <= ex_branchAddress;
             mem_instruction <= ex_instruction;
             mem_aluResult <= ex_aluResult;
@@ -293,8 +327,6 @@ module riscv_basic_pipeline
     //////////////////////////////////////////////////////////////////////
     // WB: Write Back
     //////////////////////////////////////////////////////////////////////	
-    logic[XLEN - 1:0] wb_RegWriteData, wb_MemToReg, wb_aluResult, wb_RegWrite;
-    riscv_core_p::Instruction wb_instruction;
 
     assign wb_RegWriteData = wb_MemToReg ? dReadData : wb_aluResult;
     assign WriteBackData = wb_RegWriteData;
@@ -313,5 +345,106 @@ module riscv_basic_pipeline
             wb_aluResult <= mem_aluResult;
             wb_RegWrite <= mem_RegWrite;
         end
+
+    `ifdef SIM
+
+    function printInstruction(input riscv_core_p::Instruction inst);
+        case(inst.register.opcode)
+            LUI: begin
+                $write("lui\t\t x%0d, %0d \n", inst.u.rd, inst.u.imm31_12);
+            end
+            JAL: begin
+                $write("jal\t\t x%0d, %0d \n", inst.j.rd, {inst.j.imm20, inst.j.imm19_12, inst.j.imm11, inst.j.imm10_1, 1'b0});
+            end
+            JALR: begin
+                $write("jalr\t x%0d, %0d(%0d) \n", inst.imm.rd, inst.imm.imm, inst.imm.rs1);
+            end
+            AUIPC: begin
+                $write("auipc\t x%0d, $0d \n", inst.u.rd, inst.u.imm31_12);
+            end
+            IMM: begin
+                case(inst.imm.funct3)
+                    FUNCT3_ADD: if(inst != NOP_INSTRUCTION) $write("addi\t\t x%0d, x%0d, 0x%8h \n", inst.imm.rd, inst.imm.rs1, $signed({{20 {inst.imm.imm[BIT_11]}}, inst.imm.imm}));
+                                else $write("nop \n");
+                    FUNCT3_SLT: $write("slti\t\t x%0d, x%0d, 0x%8h \n", inst.imm.rd, inst.imm.rs1, $signed({{20 {inst.imm.imm[BIT_11]}}, inst.imm.imm}));
+                    FUNCT3_SLTU: $write("sltiu \t x%0d, x%0d, 0x%8h \n", inst.imm.rd, inst.imm.rs1, $signed({{20 {inst.imm.imm[BIT_11]}}, inst.imm.imm}));
+                    FUNCT3_XOR: $write("xori\t\t x%0d, x%0d, 0x%8h \n", inst.imm.rd, inst.imm.rs1, $signed({{20 {inst.imm.imm[BIT_11]}}, inst.imm.imm}));
+                    FUNCT3_OR: $write("ori\t\t x%0d, x%0d, 0x%8h\n", inst.imm.rd, inst.imm.rs1, $signed({{20 {inst.imm.imm[BIT_11]}}, inst.imm.imm}));
+                    FUNCT3_AND: $write("andi\t\t x%0d, x%0d, 0x%8h \n", inst.imm.rd, inst.imm.rs1, $signed({{20 {inst.imm.imm[BIT_11]}}, inst.imm.imm}));
+                    FUNCT3_SLL: $write("slli\t x%0d, x%0d, 0x%8h \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                    FUNCT3_SRL: 
+                        if (inst.register.funct7 == PRIMARY)
+                            $write("srai\t x%0d, x%0d, 0x%0h \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                            else $write("srli\t x%0d, x%0d, 0x%0h \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                    default: $write("Unimplemented \n");
+                endcase
+            end
+            BRANCH: begin
+                case(inst.branch.funct3)
+                    FUNCT3_BEQ: $write("beq\t\t x%0d, x%0d, 0x%8h \n", inst.branch.rs1, inst.branch.rs2, $signed({{19 {inst.branch.imm12}}, inst.branch.imm11, inst.branch.imm10_5, inst.branch.imm4_1, 1'b0}));
+                    FUNCT3_BNE: $write("bne\t\t x%0d, x%0d, 0x%8h \n", inst.branch.rs1, inst.branch.rs2, $signed({{19 {inst.branch.imm12}}, inst.branch.imm11, inst.branch.imm10_5, inst.branch.imm4_1, 1'b0}));
+                    FUNCT3_BLT: $write("blt\t\t x%0d, x%0d, 0x%8h \n", inst.branch.rs1, inst.branch.rs2, $signed({{19 {inst.branch.imm12}}, inst.branch.imm11, inst.branch.imm10_5, inst.branch.imm4_1, 1'b0}));
+                    FUNCT3_BLTU: $write("bltu\t x%0d, x%0d, 0x%8h \n", inst.branch.rs1, inst.branch.rs2, $signed({{19 {inst.branch.imm12}}, inst.branch.imm11, inst.branch.imm10_5, inst.branch.imm4_1, 1'b0}));
+                    FUNCT3_BGE: $write("bge\t\t x%0d, x%0d, 0x%8h \n", inst.branch.rs1, inst.branch.rs2, $signed({{19 {inst.branch.imm12}}, inst.branch.imm11, inst.branch.imm10_5, inst.branch.imm4_1, 1'b0}));
+                    FUNCT3_BGEU: $write("bgeu\t x%0d, x%0d, 0x%8h \n", inst.branch.rs1, inst.branch.rs2, $signed({{19 {inst.branch.imm12}}, inst.branch.imm11, inst.branch.imm10_5, inst.branch.imm4_1, 1'b0}));
+                    default: $write("Unimplemented \n");
+                endcase    
+            end
+            OP: begin
+                case(inst.imm.funct3)
+                    FUNCT3_ADD: if(inst == NOP_INSTRUCTION) $write("nop \n"); else if (inst.register.funct7 == PRIMARY) $write("add\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2); 
+                                else $write("sub\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                    FUNCT3_SLT: $write("slt\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                    FUNCT3_SLTU: $write("sltu\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                    FUNCT3_XOR: $write("xor\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                    FUNCT3_OR: $write("or\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                    FUNCT3_AND: $write("and\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                    FUNCT3_SLL: $write("sll\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                    FUNCT3_SRL: if (inst.register.funct7 == PRIMARY) $write("sra\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2); 
+                                else $write("srl\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
+                    default: $write("Unimplemented \n");
+                endcase
+            end
+            S: begin
+                case(inst.store.funct3)
+                    FUNCT3_B: $write("sb\t\t x%0d, %0d(x%0d)\n", inst.store.rs1, $signed({inst.store.imm11_5, inst.store.imm4_0}), inst.store.rs2);
+                    FUNCT3_H: $write("sh\t\t x%0d, %0d(x%0d)\n", inst.store.rs1, $signed({inst.store.imm11_5, inst.store.imm4_0}), inst.store.rs2);
+                    FUNCT3_W: $write("sw\t\t x%0d, %0d(x%0d)\n", inst.store.rs1, $signed({inst.store.imm11_5, inst.store.imm4_0}), inst.store.rs2);
+                    FUNCT3_D: $write("sd\t\t x%0d, %0d(x%0d)\n", inst.store.rs1, $signed({inst.store.imm11_5, inst.store.imm4_0}), inst.store.rs2);
+                    default: $write("Unimplemented \n");
+                endcase
+            end
+            L: begin
+                case(inst.store.funct3)
+                    FUNCT3_B: $write("lb\t\t x%0d, %0d(x%0d)\n", inst.imm.rd, $signed(inst.imm.imm), inst.imm.rs1);
+                    FUNCT3_H: $write("lh\t\t x%0d, %0d(x%0d)\n", inst.imm.rd, $signed(inst.imm.imm), inst.imm.rs1);
+                    FUNCT3_W: $write("lw\t\t x%0d, %0d(x%0d)\n", inst.imm.rd, $signed(inst.imm.imm), inst.imm.rs1);
+                    FUNCT3_D: $write("ld\t\t x%0d, %0d(x%0d)\n", inst.imm.rd, $signed(inst.imm.imm), inst.imm.rs1);
+                    default: $write("Unimplemented \n");
+                endcase
+            end
+            default: $write("Uknown Instruction\n");
+        endcase
+    endfunction
+
+    always_ff@(negedge clk) begin
+        `ifdef LOG_REGISTERS
+        integer i, j, c;
+        c = 0;
+        for (i = 0; i < RISCV_REG_NUM / 4; i=i+1) begin
+            $write("\t  ");
+            for (j = 0; j < 4; j=j+1) begin
+                $write("x%0d: \t%h\t\t", c, id_registerFile[c]);
+                c++;
+            end
+            $write("\n");
+        end
+        `endif
+        $write("%8dns\t\t", $time);
+        $write("0x%h  core-0: \t", if_PC);
+        $write("(0x%h)  ->  ", wb_instruction);
+        printInstruction(wb_instruction);
+    end
+    `endif
 
 endmodule

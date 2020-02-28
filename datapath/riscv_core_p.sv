@@ -91,15 +91,20 @@ package riscv_core_p;
     localparam FUNCT3_BU=3'b100;
     localparam FUNCT3_HU=3'b101;
 
+    localparam NOP_INSTRUCTION = 32'h00000013; // addi x0, x0, 0
 
     // ALU Operations enum. NOTE not complete.
     typedef enum logic[3:0] { 
         ALU_AND=4'b0000, 
         ALU_OR=4'b0001, 
-        ALU_ADD=4'b0010, 
+        ALU_ADD=4'b0010,
         ALU_SUB=4'b0110, 
-        ALU_SLT=4'b0111, 
-        ALU_XOR=4'b1100
+        ALU_SLT=4'b0111,
+        ALU_SLTU=4'b1000,
+        ALU_SLL=4'b1001,
+        ALU_SRL=4'b1011,
+        ALU_XOR=4'b1100,
+        ALU_SRA=4'b1101
     } ALUOp;
 
     // Major OpcCodes, not complete.
@@ -142,11 +147,11 @@ package riscv_core_p;
     // Branch instruction struct for decoding.
     typedef struct packed {
         logic imm12;
-        logic [BIT_10:BIT_5] imm10_5;
-        logic [REGAD_LEN - 1:0] rs2;
-        logic [REGAD_LEN - 1:0] rs1;
+        logic[BIT_10:BIT_5] imm10_5;
+        logic[REGAD_LEN - 1:0] rs2;
+        logic[REGAD_LEN - 1:0] rs1;
         logic[FUNC3_LEN - 1:0] funct3;
-        logic [BIT_4:BIT_1] imm4_1;
+        logic[BIT_4:BIT_1] imm4_1;
         logic imm11;
         OpCode opcode;
     } BranchInstruction;
@@ -161,6 +166,22 @@ package riscv_core_p;
         OpCode opcode;
     } SInstruction;
 
+        // Store/Load instruction struct for decoding.
+    typedef struct packed {
+        logic[BIT_31:BIT_12] imm31_12;
+        logic[REGAD_LEN - 1:0] rd;
+        OpCode opcode;
+    } UInstruction;
+
+    typedef struct packed {
+        logic imm20;
+        logic [BIT_10:BIT_1] imm10_1;
+        logic imm11;
+        logic [BIT_19:BIT_12] imm19_12;
+        logic [REGAD_LEN - 1:0] rd;
+        OpCode opcode;
+    } JInstruction;
+
     // Decodes all the instructions using a union of all the
     // different types.
     typedef union packed {
@@ -168,6 +189,8 @@ package riscv_core_p;
         BranchInstruction branch;
         RegInstruction register;
         ImmInstruction imm;
+        UInstruction u;
+        JInstruction j;
     } Instruction;
 
 endpackage
