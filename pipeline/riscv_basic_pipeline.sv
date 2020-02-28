@@ -14,6 +14,7 @@
 import riscv_core_p::*;
 
 `define SIM
+`define ENABLE_FPU
 // `define LOG_CSR
 // `define LOG_REGISTERS
 
@@ -40,8 +41,12 @@ module riscv_basic_pipeline
     riscv_core_p::ALUOp id_ALUCtrl;
     logic[XLEN - 1:0] id_PC, id_immediate, ex_rs1, ex_rs2;
     logic id_ALUSrc, id_MemWrite, id_MemRead, id_Branch, id_RegWrite, id_MemtoReg;
-    logic[XLEN - 1:0] id_registerFile[RISCV_REG_NUM:0];
-    logic[RISCV_CSR_LEN - 1:0] id_csrFile[RISCV_CSR_NUM:0];
+    logic[XLEN - 1:0] id_registerFile[RISCV_REG_NUM-1:0];
+    logic[RISCV_CSR_LEN - 1:0] id_csrFile[RISCV_CSR_NUM-1:0];
+
+    `ifdef ENABLE_FPU
+    logic[FLEN - 1:0] id_fRegisterFile[RISCV_REG_NUM-1:0];
+    `endif
 
     riscv_core_p::Instruction ex_instruction;
     logic[XLEN - 1:0] ex_PC, ex_immediate, ex_aluOp1, ex_aluOp2, ex_aluResult, ex_branchAddress, ex_fpuResult;

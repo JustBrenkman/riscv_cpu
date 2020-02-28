@@ -16,6 +16,7 @@
 package riscv_core_p;
     // Riscv instruction lenght.
     localparam RISCV_XLEN = 32;
+    localparam RISCV_FLEN = 32;
     // Riscv number of registers.
     localparam RISCV_REG_NUM = 32;
     localparam RISCV_INSTR_LEN = 32;
