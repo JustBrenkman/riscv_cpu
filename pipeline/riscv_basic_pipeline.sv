@@ -14,9 +14,9 @@
 import riscv_core_p::*;
 
 `define SIM
-`define ENABLE_FPU
+//`define ENABLE_FPU
 // `define LOG_CSR
-// `define LOG_REGISTERS
+`define LOG_REGISTERS
 
 // Basice pipelined riscv core.
 module riscv_basic_pipeline 
