@@ -1,3 +1,9 @@
+//
+// typePack.sv
+//
+// Version 1.2
+//
+
 package typePack;
 
 typedef enum logic[6:0]{
@@ -18,7 +24,7 @@ typedef enum logic[2:0]{
 	SLT = 3'b010,
 	SLTU = 3'b011,
 	SLL = 3'b001,
-	SRL = 3'b101,
+	SR = 3'b101,
 	XOR = 3'b100,
 	OR = 3'b110,
 	AND = 3'b111
