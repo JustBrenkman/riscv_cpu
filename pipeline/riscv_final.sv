@@ -114,7 +114,7 @@ module riscv_final
                     FUNCT3_AND: id_ALUCtrl = ALU_AND;
                     FUNCT3_SLL: id_ALUCtrl = ALU_SLL;
                     FUNCT3_SLTU: id_ALUCtrl = ALU_SLTU;
-                    FUNCT3_SRL: id_ALUCtrl = ALU_SRL;
+                    FUNCT3_SRL: id_ALUCtrl = (id_instruction.register.funct7 == PRIMARY) ? ALU_SRL : ALU_SRA;
                     default: id_ALUCtrl = ALU_AND;
                 endcase
                 id_Branch = 0;
@@ -131,10 +131,14 @@ module riscv_final
                 case(id_instruction.branch.funct3)
                     FUNCT3_BEQ: id_ALUCtrl = ALU_SUB;
                     FUNCT3_BNE: id_ALUCtrl = ALU_SUB;
-                    FUNCT3_BLT: id_ALUCtrl = ALU_SLT;
-                    FUNCT3_BLTU: id_ALUCtrl = ALU_SLTU;
-                    FUNCT3_BGE: id_ALUCtrl = ALU_SLT;
-                    FUNCT3_BGEU: id_ALUCtrl = ALU_SLTU;
+                    FUNCT3_BLT: id_ALUCtrl = ALU_SUB;
+                    // FUNCT3_BLT: id_ALUCtrl = ALU_SLT;
+                    FUNCT3_BLTU: id_ALUCtrl = ALU_SUB;
+                    // FUNCT3_BLTU: id_ALUCtrl = ALU_SLTU;
+                    FUNCT3_BGE: id_ALUCtrl = ALU_SUB;
+                    // FUNCT3_BGE: id_ALUCtrl = ALU_SLT;
+                    FUNCT3_BGEU: id_ALUCtrl = ALU_SUB;
+                    // FUNCT3_BGEU: id_ALUCtrl = ALU_SLTU;
                     default: id_ALUCtrl = ALU_ADD;
                 endcase
                 id_Branch = 1;
@@ -169,7 +173,7 @@ module riscv_final
             LUI: begin
                 id_ALUCtrl = ALU_ADD;
                 id_Branch = 0;
-                id_ALUSrc = 0;
+                id_ALUSrc = 1;
                 id_MemtoReg = 0;
                 id_RegWrite = 1;
                 id_MemRead = 0;
@@ -196,7 +200,7 @@ module riscv_final
             ex_rs1 <= 0;
             ex_rs2 <= 0;
         end else begin
-            ex_rs1 <= id_registerFile[id_instruction.register.rs1];
+            ex_rs1 <= id_registerFile[id_instruction.register.opcode == LUI ? 5'b0 : id_instruction.register.rs1];
             ex_rs2 <= id_registerFile[id_instruction.register.rs2];
 
             if (wb_RegWrite && wb_instruction.register.rd != ZERO) begin
@@ -245,7 +249,7 @@ module riscv_final
             };
             riscv_core_p::LUI: id_immediate = {
                 id_instruction.u.imm31_12,
-                {XLEN - riscv_core_p::REGAD_LEN {1'b0}}
+                {12 {1'b0}}
             };
             riscv_core_p::JAL: id_immediate = {
                 {XLEN - riscv_core_p::REGAD_LEN {id_instruction.j.imm20}},
@@ -323,6 +327,7 @@ module riscv_final
 	end
 
     // ALU combinational logic. Defaults to zero.
+
     always_comb begin
         forwardA = 0;
         if (mem_RegWrite && mem_instruction.imm.rd != 0 && mem_instruction.imm.rd == ex_instruction.register.rs1) begin
@@ -335,7 +340,7 @@ module riscv_final
             ex_aluOp1 = ex_rs1;
 
         forwardB = 0;
-        if (ex_instruction.imm.opcode == riscv_core_p::IMM || ex_instruction.imm.opcode == riscv_core_p::L || ex_instruction.imm.opcode == riscv_core_p::S)
+        if (ex_instruction.imm.opcode == riscv_core_p::IMM || ex_instruction.imm.opcode == riscv_core_p::L || ex_instruction.imm.opcode == riscv_core_p::S || ex_instruction.imm.opcode == riscv_core_p::LUI)
             ex_aluOp2 = ex_immediate;
         else if (mem_RegWrite && mem_instruction.imm.rd != 0 && mem_instruction.imm.rd == ex_instruction.register.rs2) begin
             ex_aluOp2 = mem_aluResult;
@@ -356,7 +361,7 @@ module riscv_final
             ALU_SLTU: ex_aluResult = ex_aluOp1 < ex_aluOp2;
             ALU_SLL: ex_aluResult = ex_aluOp1 << ex_aluOp2;
             ALU_SRL: ex_aluResult = ex_aluOp1 >> ex_aluOp2;
-            ALU_SRA: ex_aluResult = ex_aluOp1 >>> ex_aluOp2;
+            ALU_SRA: ex_aluResult = $signed(ex_aluOp1) >>> ex_aluOp2[4:0];
             default: ex_aluResult = ZERO;
         endcase
     end
@@ -387,10 +392,22 @@ module riscv_final
     assign MemWrite = mem_MemWrite;
     assign MemRead = (mem_instruction.imm.opcode == riscv_core_p::L);
     // assign MemRead = mem_MemRead;
-    assign mem_branch_taken = (mem_instruction.imm.opcode == riscv_core_p::BRANCH && mem_aluResult == 0 && mem_instruction.branch.funct3 == FUNCT3_BEQ) || 
-                              (mem_instruction.imm.opcode == riscv_core_p::BRANCH && mem_less_than && mem_instruction.branch.funct3 == FUNCT3_BLT) || 
-                              (mem_instruction.imm.opcode == riscv_core_p::BRANCH && !mem_less_than_unsigned && mem_instruction.branch.funct3 == FUNCT3_BGEU) ||
-                              (mem_instruction.imm.opcode == riscv_core_p::BRANCH && !mem_less_than && mem_instruction.branch.funct3 == FUNCT3_BGE);
+    // assign mem_branch_taken = (mem_instruction.imm.opcode == riscv_core_p::BRANCH && mem_aluResult == 0 && mem_instruction.branch.funct3 == FUNCT3_BEQ) || 
+    //                           (mem_instruction.imm.opcode == riscv_core_p::BRANCH && mem_less_than && mem_instruction.branch.funct3 == FUNCT3_BLT) || 
+    //                           (mem_instruction.imm.opcode == riscv_core_p::BRANCH && !mem_less_than_unsigned && mem_instruction.branch.funct3 == FUNCT3_BGEU) ||
+    //                           (mem_instruction.imm.opcode == riscv_core_p::BRANCH && !mem_less_than && mem_instruction.branch.funct3 == FUNCT3_BGE);
+
+    always_comb
+	begin
+		mem_branch_taken = 0;  // default case (not taken)
+		if (mem_instruction.imm.opcode == riscv_core_p::BRANCH)
+			case (mem_instruction.branch.funct3)
+				riscv_core_p::FUNCT3_BEQ: mem_branch_taken = (mem_aluResult == 0);
+				riscv_core_p::FUNCT3_BNE: mem_branch_taken = (mem_aluResult != 0);
+				riscv_core_p::FUNCT3_BGE: mem_branch_taken = ((mem_aluResult == 0) || ($signed(mem_aluResult) > 0));
+				riscv_core_p::FUNCT3_BLT: mem_branch_taken = ($signed(mem_aluResult) < 0);
+			endcase
+	end
     assign mem_MemWrite = (mem_instruction.imm.opcode == riscv_core_p::S);
     assign insert_mem_bubble = mem_branch_taken;
 
