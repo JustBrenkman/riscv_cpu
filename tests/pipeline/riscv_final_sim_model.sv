@@ -10,6 +10,8 @@
 //   
 //////////////////////////////////////////////////////////////////////////////////
 
+`define DISPLAY_MESSAGES
+
 module riscv_final_sim_model
 	(tb_clk, tb_rst, rtl_PC, rtl_Instruction, rtl_iMemRead, rtl_ALUResult, rtl_dAddress, rtl_dWriteData, 
 	rtl_dReadData, rtl_MemRead, rtl_MemWrite, rtl_WriteBackData, inst_mem_filename, data_mem_filename, error_count);
@@ -176,7 +178,7 @@ https://forums.xilinx.com/t5/Simulation-and-Verification/readmemh-doesn-t-suppor
 		
 	// checking
 	always@(negedge tb_clk) begin
-		
+		`ifdef DISPLAY_MESSAGES
 		if ($time != 0 && !tb_rst) begin
 		
 			// Print the time and accumulated errors (so they can identify error #1)
@@ -348,6 +350,7 @@ https://forums.xilinx.com/t5/Simulation-and-Verification/readmemh-doesn-t-suppor
 			$display("*** Error: Simulation Stopped due to errors ***");
 			$finish;
 		end
+        `endif
 	end
 
 	

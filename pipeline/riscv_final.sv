@@ -14,11 +14,12 @@
 import riscv_core_p::*;
 
 // `define SIM
+// `define DISPLAY_NOP
 //`define ENABLE_FPU
 // `define LOG_CSR
 // `define LOG_REGISTERS
 
-// Basice pipelined riscv core.
+// Final pipelined riscv core.
 module riscv_final 
 #(
     parameter INITIAL_PC = 32'h00400000,
@@ -50,19 +51,21 @@ module riscv_final
     `endif
 
     riscv_core_p::Instruction ex_instruction;
-    logic[XLEN - 1:0] ex_PC, ex_immediate, ex_aluOp1, ex_aluOp2, ex_aluResult, ex_branchAddress, ex_fpuResult;
+    logic[XLEN - 1:0] ex_PC, ex_immediate, ex_aluOp1, ex_aluOp2, ex_aluResult, ex_branchAddress, ex_fpuResult, ex_PC_target, ex_dWriteData;
     logic ex_ALUSrc, ex_MemWrite, ex_MemRead, ex_Branch, ex_RegWrite, ex_MemtoReg, ex_Zero, ex_less_than, ex_less_than_unsigned;
     riscv_core_p::ALUOp ex_ALUCtrl;
 
     riscv_core_p::Instruction mem_instruction;
-    logic[XLEN - 1:0] mem_aluResult, mem_branchAddress, mem_rs2, mem_PC;
+    logic[XLEN - 1:0] mem_aluResult, mem_branchAddress, mem_rs2, mem_PC, mem_PC_target, mem_dWriteData;
     logic mem_MemWrite, mem_MemRead, mem_Branch, mem_RegWrite, mem_MemtoReg, mem_Zero, mem_PCSrc, mem_less_than, mem_less_than_unsigned;
 
-    logic[XLEN - 1:0] wb_RegWriteData, wb_MemToReg, wb_aluResult, wb_RegWrite;
+    logic[XLEN - 1:0] wb_RegWriteData, wb_aluResult, wb_PC, wb_PC_target;
+    logic wb_MemToReg, wb_RegWrite;
     riscv_core_p::Instruction wb_instruction;
 
     // Forwarding logic signals
-    logic load_use_condition, load_use, insert_ex_bubble, wb_branch_taken, insert_mem_bubble, mem_branch_taken;
+    logic load_use_condition, load_use, insert_ex_bubble, wb_branch_taken, insert_mem_bubble, 
+          mem_branch_taken, mem_jump, wb_jump;
 	logic [1:0] forwardA, forwardB;
 
     // fpu_core fpu(.clk(clk), .rst(rst), .start(), .op(), .a(ex_aluOp1), .b(ex_aluOp2), .busy(), .result(ex_fpuResult));
@@ -82,7 +85,7 @@ module riscv_final
             id_PC <= 32'hxxxxxxxx;
         end else begin
             if (iMemRead) begin
-                if (mem_branch_taken)
+                if (mem_jump)
                     if_PC <= mem_branchAddress;
                 else
                     if_PC <= PC + 4;
@@ -96,7 +99,7 @@ module riscv_final
     //////////////////////////////////////////////////////////////////////	
 
     assign id_instruction = instruction;
-    assign insert_ex_bubble = load_use || mem_branch_taken || wb_branch_taken;
+    assign insert_ex_bubble = load_use || mem_jump || wb_jump;
 
 
     // Combinational logic to determine what the instruction is and control the datapath.
@@ -179,6 +182,24 @@ module riscv_final
                 id_MemRead = 0;
                 id_MemWrite = 0;
             end
+            JAL: begin
+                id_ALUCtrl = ALU_ADD;
+                id_Branch = 0;
+                id_ALUSrc = 1;
+                id_MemtoReg = 0;
+                id_RegWrite = 1;
+                id_MemRead = 0;
+                id_MemWrite = 0;
+            end
+            JALR: begin
+                id_ALUCtrl = ALU_ADD;
+                id_Branch = 0;
+                id_ALUSrc = 1;
+                id_MemtoReg = 0;
+                id_RegWrite = 1;
+                id_MemRead = 0;
+                id_MemWrite = 0;
+            end
             // Default values, everything is zeroed.
             default: begin
                 id_ALUCtrl = ALU_ADD;
@@ -204,11 +225,11 @@ module riscv_final
             ex_rs2 <= id_registerFile[id_instruction.register.rs2];
 
             if (wb_RegWrite && wb_instruction.register.rd != ZERO) begin
-                id_registerFile[wb_instruction.register.rd] <= wb_RegWriteData;
+                id_registerFile[wb_instruction.register.rd] <= WriteBackData;
                 if (id_instruction.register.rs1 == wb_instruction.register.rd)
-                    ex_rs1 <= wb_RegWriteData;
+                    ex_rs1 <= WriteBackData;
                 if (id_instruction.register.rs2 == wb_instruction.register.rd)
-                    ex_rs2 <= wb_RegWriteData;
+                    ex_rs2 <= WriteBackData;
             end
         end
     end
@@ -259,6 +280,10 @@ module riscv_final
                 id_instruction.j.imm10_1,
                 1'b0
             };
+            riscv_core_p::JALR: id_immediate = {
+                {XLEN - riscv_core_p::REGAD_LEN {id_instruction.imm.imm[BIT_11]}}, 
+                id_instruction.imm.imm
+            };
             default: id_immediate = {
                 {XLEN - riscv_core_p::REGAD_LEN {id_instruction.imm.imm[BIT_11]}}, 
                 id_instruction.imm.imm
@@ -278,11 +303,13 @@ module riscv_final
     assign ex_less_than_unsigned = ex_aluOp1 < ex_aluOp2;
     assign ALUResult = ex_aluResult;
 
-    assign ex_branchAddress = ex_immediate + ex_PC;
+    assign ex_branchAddress = (ex_instruction.imm.opcode == riscv_core_p::JAL) ? ex_PC + ex_immediate : (ex_instruction.imm.opcode == riscv_core_p::JALR) ? ex_aluOp1 + ex_immediate : ex_immediate + ex_PC;
     assign load_use_condition =	(ex_instruction.imm.opcode == riscv_core_p::L) &&  // EX is a load
 						((ex_instruction.register.rd == id_instruction.register.rs1) || // desitination reguster of EX used by ID1
 						 (ex_instruction.register.rd == id_instruction.register.rs2));  // desitination reguster of EX used by ID2						
-	assign load_use = load_use_condition && !mem_branch_taken;
+	assign load_use = load_use_condition && !mem_jump;
+
+    assign ex_PC_target = (ex_instruction.imm.opcode == riscv_core_p::JAL || ex_instruction.imm.opcode == riscv_core_p::JALR) ? ex_PC + NEXT_INST : 0;
 
     // Pipelines the ID stage control signals to the EX stage.
     always@(posedge clk) begin
@@ -340,7 +367,7 @@ module riscv_final
             ex_aluOp1 = ex_rs1;
 
         forwardB = 0;
-        if (ex_instruction.imm.opcode == riscv_core_p::IMM || ex_instruction.imm.opcode == riscv_core_p::L || ex_instruction.imm.opcode == riscv_core_p::S || ex_instruction.imm.opcode == riscv_core_p::LUI)
+        if (ex_instruction.imm.opcode == riscv_core_p::IMM || ex_instruction.imm.opcode == riscv_core_p::L || ex_instruction.imm.opcode == riscv_core_p::LUI)
             ex_aluOp2 = ex_immediate;
         else if (mem_RegWrite && mem_instruction.imm.rd != 0 && mem_instruction.imm.rd == ex_instruction.register.rs2) begin
             ex_aluOp2 = mem_aluResult;
@@ -350,6 +377,11 @@ module riscv_final
             forwardB = 2;
         end else
             ex_aluOp2 = ex_rs2;
+
+        if (ex_instruction.imm.opcode == riscv_core_p::S) begin
+			ex_dWriteData = ex_aluOp2;	// the forwarded data goes to the "write data"
+			ex_aluOp2 = ex_immediate;   // operand 2 needs to be overwritten by immediate data
+		end
 
         case(ex_ALUCtrl)
             ALU_ADD: ex_aluResult = ex_aluOp1 + ex_aluOp2;
@@ -388,7 +420,7 @@ module riscv_final
 
     // assign mem_PCSrc = mem_Branch & mem_Zero;
     assign dAddress = mem_aluResult;
-    assign dWriteData = mem_rs2;
+    assign dWriteData = mem_dWriteData;
     assign MemWrite = mem_MemWrite;
     assign MemRead = (mem_instruction.imm.opcode == riscv_core_p::L);
     // assign MemRead = mem_MemRead;
@@ -409,7 +441,8 @@ module riscv_final
 			endcase
 	end
     assign mem_MemWrite = (mem_instruction.imm.opcode == riscv_core_p::S);
-    assign insert_mem_bubble = mem_branch_taken;
+    assign mem_jump = (mem_branch_taken || mem_instruction.imm.opcode == riscv_core_p::JAL || mem_instruction.imm.opcode == riscv_core_p::JALR);
+    assign insert_mem_bubble = mem_jump;
 
     // Pipelines the EX stage control signals to the MEM stage.
     always@(posedge clk) begin
@@ -424,6 +457,7 @@ module riscv_final
             mem_Zero <= 0;
             mem_aluResult <= 0;
             mem_rs2 <= 0;
+            mem_dWriteData <= 0;
             mem_PC <= 32'hxxxxxxxx;
         end else if (insert_mem_bubble) begin
             mem_MemRead <= 0;
@@ -434,8 +468,10 @@ module riscv_final
             mem_instruction <= NOP_INSTRUCTION;
             mem_branchAddress <= 0;
             mem_rs2 <= 0;
+            mem_dWriteData <= 0;
             mem_Zero <= 0;
             mem_PC <= 32'hxxxxxxxx;
+            mem_PC_target <= 0;
         end else begin
             // mem_MemWrite <= ex_MemWrite;
             mem_MemRead <= ex_MemRead;
@@ -446,8 +482,11 @@ module riscv_final
             mem_branchAddress <= ex_branchAddress;
             mem_instruction <= ex_instruction;
             mem_aluResult <= ex_aluResult;
+            mem_dWriteData <= ex_dWriteData;
             mem_Zero <= ex_Zero;
             mem_rs2 <= ex_rs2;
+            mem_PC <= ex_PC;
+            mem_PC_target <= ex_PC_target;
         end
     end
 
@@ -455,8 +494,8 @@ module riscv_final
     // WB: Write Back
     //////////////////////////////////////////////////////////////////////	
 
-    assign wb_RegWriteData = wb_MemToReg ? dReadData : wb_aluResult;
-    assign WriteBackData = wb_RegWriteData;
+    assign wb_RegWriteData = (wb_instruction.imm.opcode == riscv_core_p::L) ? dReadData : wb_aluResult;
+    assign WriteBackData = (wb_instruction.imm.opcode == riscv_core_p::JAL || wb_instruction.imm.opcode == riscv_core_p::JALR) ? wb_PC_target : wb_RegWriteData;
 
     // Pipelines the MEM stage controls and results to the WB stage.
     always_ff@(posedge clk)
@@ -466,6 +505,9 @@ module riscv_final
             wb_aluResult <= 0;
             wb_RegWrite <= 0;
             wb_branch_taken <= 0;
+            wb_jump <= 0;
+            wb_PC <= 0;
+            wb_PC_target <= 0;
         end
         else begin
             wb_instruction <= mem_instruction;
@@ -473,6 +515,9 @@ module riscv_final
             wb_aluResult <= mem_aluResult;
             wb_RegWrite <= mem_RegWrite;
             wb_branch_taken <= mem_branch_taken;
+            wb_jump <= mem_jump;
+            wb_PC <= mem_PC;
+            wb_PC_target <= mem_PC_target;
         end
 
     `ifdef SIM
@@ -486,7 +531,7 @@ module riscv_final
                 $write("jal\t\t x%0d, %0d \n", inst.j.rd, {inst.j.imm20, inst.j.imm19_12, inst.j.imm11, inst.j.imm10_1, 1'b0});
             end
             JALR: begin
-                $write("jalr\t x%0d, %0d(%0d) \n", inst.imm.rd, inst.imm.imm, inst.imm.rs1);
+                $write("jalr\t\t x%0d, %0d(%0d) \n", inst.imm.rd, inst.imm.imm, inst.imm.rs1);
             end
             AUIPC: begin
                 $write("auipc\t x%0d, $0d \n", inst.u.rd, inst.u.imm31_12);
@@ -497,18 +542,20 @@ module riscv_final
                     FUNCT3_ADD: 
                         if(inst != NOP_INSTRUCTION) 
                             $write("addi\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.imm.rd, inst.imm.rs1, $signed(immediateVal), $signed(immediateVal));
+                        `ifdef DISPLAY_NOP
                         else $write("nop \n");
+                        `endif
                     FUNCT3_SLT: $write("slti\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.imm.rd, inst.imm.rs1, $signed(immediateVal), $signed(immediateVal));
                     FUNCT3_SLTU: $write("sltiu \t x%0d, x%0d, 0x%8h (%0d) \n", inst.imm.rd, inst.imm.rs1, $signed(immediateVal), $signed(immediateVal));
                     FUNCT3_XOR: $write("xori\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.imm.rd, inst.imm.rs1, $signed(immediateVal), $signed(immediateVal));
                     FUNCT3_OR: $write("ori\t\t x%0d, x%0d, 0x%8h (%0d)\n", inst.imm.rd, inst.imm.rs1, $signed(immediateVal), $signed(immediateVal));
                     FUNCT3_AND: $write("andi\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.imm.rd, inst.imm.rs1, $signed(immediateVal), $signed(immediateVal));
-                    FUNCT3_SLL: $write("slli\t x%0d, x%0d, 0x%8h (%0d) \n", inst.register.rd, inst.register.rs1, inst.register.rs2, inst.register.rs2);
+                    FUNCT3_SLL: $write("slli\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.register.rd, inst.register.rs1, inst.register.rs2, inst.register.rs2);
                     FUNCT3_SRL: 
                         if (inst.register.funct7 == PRIMARY)
-                            $write("srai\t x%0d, x%0d, 0x%8h (%0d) \n", inst.register.rd, inst.register.rs1, inst.register.rs2, inst.register.rs2);
+                            $write("srai\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.register.rd, inst.register.rs1, inst.register.rs2, inst.register.rs2);
                         else 
-                            $write("srli\t x%0d, x%0d, 0x%8h (%0d) \n", inst.register.rd, inst.register.rs1, inst.register.rs2, inst.register.rs2);
+                            $write("srli\t\t x%0d, x%0d, 0x%8h (%0d) \n", inst.register.rd, inst.register.rs1, inst.register.rs2, inst.register.rs2);
                     default: $write("Unimplemented \n");
                 endcase
             end
@@ -527,8 +574,11 @@ module riscv_final
             OP: begin
                 case(inst.imm.funct3)
                     FUNCT3_ADD: 
-                        if(inst == NOP_INSTRUCTION) 
-                            $write("nop \n"); else if (inst.register.funct7 == PRIMARY) $write("add\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2); 
+                        if(inst == NOP_INSTRUCTION) begin
+                            `ifdef DISPLAY_NOP
+                            $write("nop \n"); 
+                            `endif
+                        end else if (inst.register.funct7 == PRIMARY) $write("add\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2); 
                         else 
                             $write("sub\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
                     FUNCT3_SLT: $write("slt\t\t x%0d, x%0d, x%0d \n", inst.register.rd, inst.register.rs1, inst.register.rs2);
@@ -576,7 +626,19 @@ module riscv_final
         endcase
     endfunction
 
+
+
+    integer numInst;
+
+    always_ff@(posedge clk) begin
+        if(rst)
+            numInst = 0;
+    end
+
     always_ff@(negedge clk) begin
+        if (rst) begin
+            
+        end else begin
         `ifdef LOG_CSR
             $write("\t  fcsr: \t0x%h\t\tcycle: \t0x%h\t\ttime: \t0x%h\n", id_csrFile[CSR_FCSR], id_csrFile[CSR_CYCLE], id_csrFile[CSR_TIME]);
         `endif
@@ -592,11 +654,21 @@ module riscv_final
             $write("\n");
         end
         `endif
-        $write("%8dns\t\t", $time);
-        $write("0x%h  core-0: \t", if_PC);
-        $write("(0x%h)  ->  ", wb_instruction);
-        printInstruction(wb_instruction);
+        if (wb_instruction != NOP_INSTRUCTION && wb_instruction != 32'h00000000) begin
+            numInst++;
+        end
+
+        `ifndef DISPLAY_NOP
+        if (wb_instruction != NOP_INSTRUCTION) begin
+        `endif
+            $write("%8dns\t%d :\t", $time, numInst);
+            $write("0x%h  core-0: \t", if_PC);
+            $write("(0x%h)  ->  ", wb_instruction);
+            printInstruction(wb_instruction); 
+        `ifndef DISPLAY_NOP
+        end
+        `endif
+    end
     end
     `endif
-
 endmodule
