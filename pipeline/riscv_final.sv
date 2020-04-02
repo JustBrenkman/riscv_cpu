@@ -13,7 +13,7 @@
 
 import riscv_core_p::*;
 
-// `define SIM
+`define SIM
 // `define DISPLAY_NOP
 //`define ENABLE_FPU
 // `define LOG_CSR
