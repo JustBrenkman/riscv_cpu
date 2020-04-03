@@ -17,6 +17,11 @@
 #   x10-x11: function arguments/return values
 #
 #######################
+
+
+# compiling use the following gcc command
+# riscv64-unknown-elf-gcc -nostdlib -march=rv32i -mabi=ilp32 fib_main.s -o fib_main
+
 .globl  main
 
 .text
