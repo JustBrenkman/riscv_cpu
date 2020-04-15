@@ -25,7 +25,7 @@
 #
 ###########################################################################
 
-.global _start
+.globl _start
 .text
 
 # I/O address offset constants
@@ -78,6 +78,8 @@ main:
     addi    tp, tp, 0x7f
     slli    tp, tp, 8
 
+    jal     clear_screen
+
 loop:
     jal     process_btns
     j       loop
@@ -109,7 +111,7 @@ process_btnl:
     sw      t0, 0(t1)
 
     # Decrement the row variable if greater than zero.
-    addi    t4, zero, %lo(current_row)(gp)
+    addi    t4, gp, %lo(current_row)
     lw      t3, 0(t4)
     # If the current row is 0 don't do anything.
     beq     t3, zero, exit_btns
@@ -143,7 +145,7 @@ process_btnr:
     sw      t0, 0(t1)
 
     # Decrement the row variable if greater than zero.
-    addi    t4, zero, %lo(current_row)(gp)
+    addi    t4, gp, %lo(current_row)
     lw      t3, 0(t4)
     # If the current row is the last row don't do anything.
     beq     t4, t5, exit_btns
@@ -173,11 +175,12 @@ process_btnu:
     # get the pointer to the word in memory and set it
     # to 1.
     addi    t1, gp, %lo(btnu_pressed)
-    addi    t0, zero, 1
+    lw      t0, 0(t1)
+    addi    t0, t0, 1
     sw      t0, 0(t1)
 
     # Decrement the row variable if greater than zero.
-    addi    t4, zero, %lo(current_col)(gp)
+    addi    t4, gp, %lo(current_col)
     lw      t3, 0(t4)
     # If the current row is the last row don't do anything.
     beq     t4, t5, exit_btns
@@ -207,11 +210,12 @@ process_btnd:
     # get the pointer to the word in memory and set it
     # to 1.
     addi    t1, gp, %lo(btnd_pressed)
-    addi    t0, zero, 1
+    lw      t0, 0(t1)
+    addi    t0, t0, 1
     sw      t0, 0(t1)
 
     # Decrement the row variable if greater than zero.
-    addi    t4, zero, %lo(current_col)(gp)
+    addi    t4, gp, %lo(current_col)
     lw      t3, 0(t4)
     # If the current row is 0 don't do anything.
     beq     t3, zero, exit_btns
@@ -241,12 +245,12 @@ process_btnc:
     # get the pointer to the word in memory and set it
     # to 1.
     addi    t1, gp, %lo(btnc_pressed)
-    addi    t0, zero, 1
+    lw      t0, 0(t1)
+    addi    t0, t0, 1
     sw      t0, 0(t1)
 
     # Read color from switches and draw pixel on screen.
     lw      a0, SWITCHES(tp)
-    andi    a0, a0, 0xfff
     jal     draw_pixel
 
     # Only process one button at a time.
@@ -295,6 +299,25 @@ draw_pixel:
     sw      t1, 0(t0)
     ret
 
+
+clear_screen:
+    # Create black background
+    li      t0, 0xfff
+    # Set background color
+    sw      t0, CHAR_COLOR(tp)
+    li      t0, VGA_BASE_ADDRESS
+    addi    t1, x0, SPACE_CHAR	
+    li      t2, VGA_ADDRESS_SIZE
+    add     t2, t2, t0
+write_char_loop:
+    # Write every pixel to be space (clear screen).
+    sw      t1, 0(t0)
+    addi    t0, t0, 4
+    beq     t0, t2, exit_clear_screen
+    j       write_char_loop
+exit_clear_screen:
+    # Go back to to the main function.
+    ret
 
 .data
     current_col:
