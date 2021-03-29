@@ -8,8 +8,8 @@ module pipeline_simple_tb();
     logic[31:0] tb_instruction;
 	integer i;
 	
-	localparam instruction_memory_filename = "pipeline_nop_inst.txt";
-	localparam data_memory_filename = "pipeline_nop_data.txt";
+	localparam instruction_memory_filename = "forwarding_inst.txt";
+	localparam data_memory_filename = "forwarding_data.txt";
 	localparam EBREAK_INSTRUCTION = 32'h00100073;
 	localparam TEXT_SEGMENT_START_ADDRESSS = 32'h00000000; // 32'h00400000;
 	localparam INSTRUCTION_MEMORY_WORDS = 128;
@@ -18,7 +18,12 @@ module pipeline_simple_tb();
 	localparam DATA_SEGMENT_START_ADDRESSS = 32'h00002000;
 	localparam DATA_SEGMENT_END_ADDRESSS = DATA_SEGMENT_START_ADDRESSS + DATA_MEMORY_WORDS*4-1;
 
-	riscv_basic_pipeline #(.INITIAL_PC(TEXT_SEGMENT_START_ADDRESSS))  
+//	riscv_basic_pipeline #(.INITIAL_PC(TEXT_SEGMENT_START_ADDRESSS))  
+//						riscv(.clk(clk), .rst(rst), .instruction(tb_instruction), .PC(tb_PC), 
+//							.ALUResult(tb_ALUResult), .dAddress(tb_Address), .dWriteData(tb_dWriteData), .dReadData(tb_dReadData),
+//							.MemRead(tb_MemRead), .MemWrite(tb_MemWrite), .WriteBackData(tb_WriteBackData) );
+							
+    riscv_forwarding_pipeline #(.INITIAL_PC(TEXT_SEGMENT_START_ADDRESSS))  
 						riscv(.clk(clk), .rst(rst), .instruction(tb_instruction), .PC(tb_PC), 
 							.ALUResult(tb_ALUResult), .dAddress(tb_Address), .dWriteData(tb_dWriteData), .dReadData(tb_dReadData),
 							.MemRead(tb_MemRead), .MemWrite(tb_MemWrite), .WriteBackData(tb_WriteBackData) );

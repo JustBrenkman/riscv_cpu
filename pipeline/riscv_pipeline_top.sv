@@ -10,8 +10,11 @@ module riscv_pipeline_top (input wire logic clk, input wire logic rst, output lo
     logic[RISCV_XLEN - 1:0] dAddress;
     logic[RISCV_XLEN - 1:0] dWriteData;
     logic[RISCV_XLEN - 1:0] WriteBackData;
+    
+    logic iMemRead;
 
-    riscv_basic_pipeline riscv(.*);
+//    riscv_basic_pipeline riscv(.*);
+    riscv_forwarding_pipeline riscv(.*);
 
     always_ff@(posedge clk) begin
         if (rst) begin
